@@ -1,4 +1,4 @@
-const CACHE_NAME = "isometric-shell-v3";
+const CACHE_NAME = "isometric-shell-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -6,7 +6,6 @@ const APP_SHELL = [
   "./timer.js",
   "./app.js",
   "./manifest.webmanifest",
-  "./icons/icon.svg",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
 ];
