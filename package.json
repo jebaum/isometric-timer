@@ -1,0 +1,8 @@
+{
+  "name": "stretch-timer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node timer.test.js"
+  }
+}
