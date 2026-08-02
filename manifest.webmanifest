@@ -1,7 +1,7 @@
 {
   "name": "Isometric Timer",
   "short_name": "Isometric",
-  "description": "A quiet, guided stretching-routine interval timer.",
+  "description": "A quiet, guided isometric-hold interval timer.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

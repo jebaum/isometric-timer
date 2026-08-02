@@ -1,6 +1,6 @@
 # Isometric Timer PWA
 
-An installable Android-friendly stretching timer. It keeps a quiet routine,
+An installable Android-friendly isometric-hold timer. It keeps a quiet routine,
 precise phase timing, touch controls, and a three-second visual warning, with
 no server-side code or JavaScript dependencies.
 
