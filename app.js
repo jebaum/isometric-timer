@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS, Routine, buildSchedule, clock } from "./timer.js";
 
-const STORAGE_KEY = "stretch-settings-v1";
+const STORAGE_KEY = "isometric-settings-v1";
 const FRAME_INTERVAL = 50;
 const WARNING_SECONDS = 3;
 
