@@ -1,4 +1,4 @@
-# Stretch PWA
+# Isometric Timer PWA
 
 An installable Android-friendly stretching timer. It keeps a quiet routine,
 precise phase timing, touch controls, and a three-second visual warning, with
@@ -21,7 +21,7 @@ npm test
 
 ## Install on Android
 
-Visit <https://jebaum.github.io/stretch-timer/> in Chrome on Android, then use
+Visit <https://jebaum.github.io/isometric-timer/> in Chrome on Android, then use
 **Install app** or **Add to Home screen** from Chrome's menu. The service worker
 caches the complete app during the first visit, so later routines work offline.
 While a routine is active, the app requests a screen wake lock and reacquires it
