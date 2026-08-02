@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Framework Material theme keeps the app free of appcompat; all real
+         styling lives in Compose. Dark only, matching the web app. -->
+    <style name="Theme.Isometric" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+</resources>

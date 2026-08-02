@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Painted before Compose draws, so it must match the TOP of the backdrop
+         gradient rather than the flat colour underneath it: BackdropTop
+         (#F5231E2D) composited over Background (#121016). Any drift shows as a
+         step during the cold-launch frame. -->
+    <color name="window_background">#221D2C</color>
+</resources>

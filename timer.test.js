@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -124,4 +125,24 @@ test("manifest contains installable icons and every cached shell file exists", a
   for (const relativePath of cachedPaths) {
     await readFile(new URL(relativePath, new URL(`file://${root}/`)));
   }
+});
+
+// The Android port is verified against a fixture generated from this file, so a
+// change here that the Kotlin has not matched must fail on this side too --
+// otherwise JsParityTest keeps passing against a stale reference.
+test("the Android parity fixture still matches this implementation", async () => {
+  const base = new URL("./android/app/src/test/resources/", import.meta.url);
+  const generator = fileURLToPath(new URL("./js-reference-drive.mjs", base));
+  const checkedIn = await readFile(new URL("./js-reference-drive.txt", base), "utf8");
+
+  const regenerated = execFileSync(process.execPath, [generator], { encoding: "utf8" });
+
+  assert.equal(
+    regenerated.trimEnd(),
+    checkedIn.trimEnd(),
+    "timer.js changed without regenerating the Android parity fixture. Run:\n"
+      + "  node android/app/src/test/resources/js-reference-drive.mjs"
+      + " > android/app/src/test/resources/js-reference-drive.txt\n"
+      + "then re-run the Kotlin suite to see whether the port needs the same change.",
+  );
 });

@@ -1,8 +1,15 @@
-# Isometric Timer PWA
+# Isometric Timer
 
-An installable Android-friendly isometric-hold timer. It keeps a quiet routine,
-precise phase timing, touch controls, and a three-second visual warning, with
-no server-side code or JavaScript dependencies.
+An isometric-hold interval timer, in two implementations:
+
+- **A PWA** at the repository root — installable, offline, no dependencies.
+- **A native Android app** in [`android/`](android/) — Kotlin and Compose, built
+  to be sideloaded. It adds sound and vibration on every phase boundary, which
+  matters because during a hold you are usually not looking at the screen.
+
+The routine logic is duplicated across the two (`timer.js` and
+`android/…/timer/`), and so are its tests. A change to how a routine is built or
+timed belongs in both.
 
 ## Run locally
 
@@ -21,11 +28,14 @@ npm test
 
 ## Install on Android
 
-Visit <https://jebaum.github.io/isometric-timer/> in Chrome on Android, then use
-**Install app** or **Add to Home screen** from Chrome's menu. The service worker
-caches the complete app during the first visit, so later routines work offline.
-While a routine is active, the app requests a screen wake lock and reacquires it
-after returning from another app.
+Preferred: build and sideload the native app — see
+[`android/README.md`](android/README.md).
+
+As a PWA, visit <https://jebaum.github.io/isometric-timer/> in Chrome on
+Android, then use **Install app** or **Add to Home screen** from Chrome's menu.
+The service worker caches the complete app during the first visit, so later
+routines work offline. While a routine is active, the app requests a screen wake
+lock and reacquires it after returning from another app.
 
 ## Controls
 
