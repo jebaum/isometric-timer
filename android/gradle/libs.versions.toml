@@ -4,7 +4,7 @@ agp = "9.3.1"
 # plugin has to match the Kotlin compiler exactly, so this tracks AGP, not the
 # newest Kotlin release.
 kotlin = "2.2.10"
-composeBom = "2026.06.01"
+composeBom = "2026.08.00"
 activityCompose = "1.13.0"
 lifecycle = "2.11.0"
 coreKtx = "1.19.0"
