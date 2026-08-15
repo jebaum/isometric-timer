@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,7 +33,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -46,6 +49,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -66,6 +70,12 @@ import dev.jebaum.isometric.timer.Phase
 import dev.jebaum.isometric.timer.Settings
 import dev.jebaum.isometric.timer.Snapshot
 import dev.jebaum.isometric.timer.clock
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
+import kotlinx.coroutines.delay
 
 /**
  * Owns the effects; all rendering lives in [TimerContent] so every routine state
@@ -74,7 +84,39 @@ import dev.jebaum.isometric.timer.clock
 @Composable
 fun TimerScreen(viewModel: RoutineViewModel) {
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var historyOpen by rememberSaveable { mutableStateOf(false) }
+    var spacingWarningAt by rememberSaveable { mutableStateOf<Long?>(null) }
+    var wallTime by rememberSaveable { mutableLongStateOf(viewModel.currentWallTimeMillis()) }
+    var currentZone by remember { mutableStateOf(ZoneId.systemDefault()) }
     val active = viewModel.active
+    val lastCompletionAt = viewModel.lastCompletionAt
+    val historyVersion = viewModel.historyVersion
+
+    // Unlike the routine clock, the readiness message needs civil time. Update
+    // once a minute so an open READY screen crosses the eight-hour mark and
+    // midnight without requiring a tap or a restart.
+    LaunchedEffect(lastCompletionAt) {
+        while (true) {
+            wallTime = viewModel.currentWallTimeMillis()
+            currentZone = ZoneId.systemDefault()
+            delay(60_000L)
+        }
+    }
+
+    val zone = currentZone
+    val locale = LocalLocale.current.platformLocale
+    val today = Instant.ofEpochMilli(wallTime).atZone(zone).toLocalDate()
+    val todayRange = dayRange(today, zone)
+    val completionsToday = remember(today, historyVersion, zone) {
+        viewModel.completionsBetween(todayRange.startInclusive, todayRange.endExclusive).size
+    }
+    val historyMessage = historyMessage(
+        completionsToday = completionsToday,
+        lastCompletionAt = lastCompletionAt,
+        nowMillis = wallTime,
+        zone = zone,
+        locale = locale,
+    )
 
     // The web app had to juggle the Wake Lock API and reacquire on visibility
     // change; natively this is the whole feature.
@@ -98,11 +140,36 @@ fun TimerScreen(viewModel: RoutineViewModel) {
         snapshot = viewModel.snapshot,
         progress = { viewModel.progress },
         settingsEnabled = !active,
-        onToggle = viewModel::toggle,
+        historyMessage = if (active) null else historyMessage,
+        onToggle = {
+            currentZone = ZoneId.systemDefault()
+            val snapshot = viewModel.snapshot
+            val warningAt = if (!snapshot.started && !snapshot.done) {
+                viewModel.spacingWarningAt()
+            } else {
+                null
+            }
+            if (warningAt == null) viewModel.toggle() else spacingWarningAt = warningAt
+        },
         onSkip = viewModel::skip,
         onReset = viewModel::reset,
+        onHistory = {
+            currentZone = ZoneId.systemDefault()
+            historyOpen = true
+        },
         onSettings = { settingsOpen = true },
     )
+
+    if (historyOpen) {
+        HistoryDialog(
+            historyVersion = historyVersion,
+            nowMillis = wallTime,
+            zone = zone,
+            locale = locale,
+            completionsBetween = viewModel::completionsBetween,
+            onDismiss = { historyOpen = false },
+        )
+    }
 
     if (settingsOpen) {
         SettingsDialog(
@@ -116,6 +183,33 @@ fun TimerScreen(viewModel: RoutineViewModel) {
             },
         )
     }
+
+    spacingWarningAt?.let { recommendedAt ->
+        AlertDialog(
+            onDismissRequest = { spacingWarningAt = null },
+            title = { Text("Less than 8 hours") },
+            text = {
+                Text(
+                    "Eight hours have not passed since your last routine. " +
+                        "The recommended gap ends " +
+                            "${formatRecommendedAt(recommendedAt, wallTime, zone, locale)}.",
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { spacingWarningAt = null }) { Text("Wait") }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        spacingWarningAt = null
+                        viewModel.toggle()
+                    },
+                ) {
+                    Text("Start anyway")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -124,9 +218,11 @@ private fun TimerContent(
     /** A lambda so the per-frame value is read during draw, not composition. */
     progress: () -> Float,
     settingsEnabled: Boolean,
+    historyMessage: String?,
     onToggle: () -> Unit,
     onSkip: () -> Unit,
     onReset: () -> Unit,
+    onHistory: () -> Unit,
     onSettings: () -> Unit,
 ) {
     val resting = snapshot.phase.kind == Kind.REST
@@ -154,6 +250,7 @@ private fun TimerContent(
             TopBar(
                 accent = accent,
                 settingsEnabled = settingsEnabled,
+                onHistory = onHistory,
                 onSettings = onSettings,
             )
             BoxWithConstraints(Modifier.weight(1f)) {
@@ -174,6 +271,7 @@ private fun TimerContent(
                         accentStrong = accentStrong,
                         countdownColor = if (snapshot.warning) Palette.Warning else accent,
                         availableHeight = available,
+                        historyMessage = historyMessage,
                         onToggle = onToggle,
                         onSkip = onSkip,
                         onReset = onReset,
@@ -185,7 +283,12 @@ private fun TimerContent(
 }
 
 @Composable
-private fun TopBar(accent: Color, settingsEnabled: Boolean, onSettings: () -> Unit) {
+private fun TopBar(
+    accent: Color,
+    settingsEnabled: Boolean,
+    onHistory: () -> Unit,
+    onSettings: () -> Unit,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -198,15 +301,23 @@ private fun TopBar(accent: Color, settingsEnabled: Boolean, onSettings: () -> Un
             color = accent,
             style = MetaLabelStyle,
         )
-        TextButton(
-            onClick = onSettings,
-            enabled = settingsEnabled,
-            modifier = Modifier.semantics { contentDescription = "Routine settings" },
-        ) {
-            SlidersIcon(
-                tint = if (settingsEnabled) Palette.Muted else Palette.Muted.copy(alpha = 0.38f),
-                modifier = Modifier.size(24.dp),
-            )
+        Row {
+            TextButton(
+                onClick = onHistory,
+                modifier = Modifier.semantics { contentDescription = "Routine history" },
+            ) {
+                CalendarIcon(tint = Palette.Muted, modifier = Modifier.size(24.dp))
+            }
+            TextButton(
+                onClick = onSettings,
+                enabled = settingsEnabled,
+                modifier = Modifier.semantics { contentDescription = "Routine settings" },
+            ) {
+                SlidersIcon(
+                    tint = if (settingsEnabled) Palette.Muted else Palette.Muted.copy(alpha = 0.38f),
+                    modifier = Modifier.size(24.dp),
+                )
+            }
         }
     }
 }
@@ -219,6 +330,7 @@ private fun TimerBody(
     accentStrong: Color,
     countdownColor: Color,
     availableHeight: Dp,
+    historyMessage: String?,
     onToggle: () -> Unit,
     onSkip: () -> Unit,
     onReset: () -> Unit,
@@ -306,6 +418,17 @@ private fun TimerBody(
                 "End routine",
                 color = if (resettable) Palette.Muted else Palette.Muted.copy(alpha = 0.38f),
                 fontSize = 13.sp,
+            )
+        }
+        if (historyMessage != null) {
+            Text(
+                text = historyMessage,
+                color = Palette.Muted,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(bottom = 8.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
     }
@@ -446,6 +569,45 @@ private fun startLabel(snapshot: Snapshot) = when {
     else -> "Pause"
 }
 
+private fun historyMessage(
+    completionsToday: Int,
+    lastCompletionAt: Long?,
+    nowMillis: Long,
+    zone: ZoneId,
+    locale: Locale,
+): String {
+    val nextRecommendedAt = lastCompletionAt?.plus(RoutineViewModel.MINIMUM_COMPLETION_GAP_MILLIS)
+    return when {
+        completionsToday >= 2 -> "$completionsToday routines today · Daily goal complete"
+        completionsToday == 1 && nextRecommendedAt != null && nowMillis < nextRecommendedAt ->
+            "1 routine today · Next after ${formatTime(nextRecommendedAt, zone, locale)}"
+        completionsToday == 1 -> "1 routine today · Ready for a second"
+        nextRecommendedAt != null && nowMillis < nextRecommendedAt ->
+            "No routine today · Next after ${formatTime(nextRecommendedAt, zone, locale)}"
+        else -> "No routine completed today"
+    }
+}
+
+private fun formatTime(atMillis: Long, zone: ZoneId, locale: Locale): String =
+    Instant.ofEpochMilli(atMillis)
+        .atZone(zone)
+        .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
+
+private fun formatRecommendedAt(
+    atMillis: Long,
+    nowMillis: Long,
+    zone: ZoneId,
+    locale: Locale,
+): String {
+    val target = Instant.ofEpochMilli(atMillis).atZone(zone)
+    val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+    return if (target.toLocalDate() == today) {
+        "at ${target.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))}"
+    } else {
+        "on ${target.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(locale))}"
+    }
+}
+
 // ---- previews ---------------------------------------------------------------
 
 private fun previewSnapshot(
@@ -478,7 +640,12 @@ private fun PreviewFrame(snapshot: Snapshot, progress: Float) {
             snapshot = snapshot,
             progress = { progress },
             settingsEnabled = !snapshot.started || snapshot.done,
-            onToggle = {}, onSkip = {}, onReset = {}, onSettings = {},
+            historyMessage = if (snapshot.started && !snapshot.done) {
+                null
+            } else {
+                "1 routine today · Next after 4:35 PM"
+            },
+            onToggle = {}, onSkip = {}, onReset = {}, onHistory = {}, onSettings = {},
         )
     }
 }

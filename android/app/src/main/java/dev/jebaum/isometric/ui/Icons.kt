@@ -4,8 +4,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 
 /**
  * The two inline SVGs from `index.html`, redrawn against the same 24x24 grid so
@@ -53,3 +55,33 @@ fun SlidersIcon(tint: Color, modifier: Modifier = Modifier) =
 @Composable
 fun CloseIcon(tint: Color, modifier: Modifier = Modifier) =
     StrokeIcon(tint, modifier, CLOSE)
+
+@Composable
+fun CalendarIcon(tint: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val unit = size.minDimension / 24f
+        val stroke = 1.8f * unit
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(3f * unit, 5f * unit),
+            size = Size(18f * unit, 16f * unit),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f * unit),
+            style = Stroke(stroke),
+        )
+        drawLine(
+            color = tint,
+            start = Offset(3f * unit, 10f * unit),
+            end = Offset(21f * unit, 10f * unit),
+            strokeWidth = stroke,
+        )
+        for (x in listOf(8f, 16f)) {
+            drawLine(
+                color = tint,
+                start = Offset(x * unit, 3f * unit),
+                end = Offset(x * unit, 7f * unit),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round,
+            )
+        }
+    }
+}

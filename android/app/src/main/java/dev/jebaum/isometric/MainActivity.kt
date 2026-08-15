@@ -33,6 +33,8 @@ class MainActivity : ComponentActivity() {
                     store = PreferencesSettingsStore(applicationContext),
                     player = AndroidCuePlayer(applicationContext),
                     now = { SystemClock.elapsedRealtime() / 1000.0 },
+                    history = SQLiteCompletionHistoryStore(applicationContext),
+                    wallNow = System::currentTimeMillis,
                 )
             }
         }

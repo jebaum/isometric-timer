@@ -2,6 +2,7 @@ package dev.jebaum.isometric
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -26,6 +27,8 @@ class RoutineViewModel(
     private val store: SettingsStore,
     private val player: CuePlayer,
     private val now: () -> Double,
+    private val history: CompletionHistoryStore = EmptyCompletionHistoryStore,
+    private val wallNow: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
 
     /**
@@ -58,6 +61,13 @@ class RoutineViewModel(
     var cuesEnabled: Boolean by mutableStateOf(store.cuesEnabled)
         private set
 
+    var lastCompletionAt: Long? by mutableStateOf(history.latest())
+        private set
+
+    /** Invalidates calendar queries after a new row is inserted. */
+    var historyVersion: Int by mutableIntStateOf(0)
+        private set
+
     private var routine = newRoutine()
 
     /** Changes at most once a second, so reading it is cheap to recompose on. */
@@ -88,6 +98,11 @@ class RoutineViewModel(
         snapshot = next
         progress = routine.progressAt(elapsed)
 
+        val completed = next.done && !previous.done
+        if (completed) rememberCompletion()
+
+        // Completion history is independent of audible cues, so this return
+        // deliberately comes after the transition is recorded.
         if (!cuesEnabled) return
 
         if (!next.started) {
@@ -96,7 +111,7 @@ class RoutineViewModel(
         }
 
         when {
-            next.done -> if (!previous.done) emit(Cue.Done)
+            next.done -> if (completed) emit(Cue.Done)
 
             // Covers both the first Start and every later phase boundary. Keyed
             // off the index rather than secondsLeft so a long frame gap cannot
@@ -120,6 +135,15 @@ class RoutineViewModel(
      */
     private fun emit(cue: Cue) {
         runCatching { player.play(cue) }
+    }
+
+    /** A storage failure must not stop the frame loop at the finish line. */
+    private fun rememberCompletion() {
+        val completedAt = wallNow()
+        runCatching { history.record(completedAt) }.onSuccess {
+            lastCompletionAt = completedAt
+            historyVersion++
+        }
     }
 
     /** Called once per frame while the routine is running. */
@@ -166,7 +190,22 @@ class RoutineViewModel(
         if (enabled) cueState = CueState.syncedTo(snapshot)
     }
 
+    fun completionsBetween(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long> =
+        history.between(startInclusiveMillis, endExclusiveMillis)
+
+    /** The eight-hour mark, but only while it is still in the future. */
+    fun spacingWarningAt(atMillis: Long = wallNow()): Long? = lastCompletionAt
+        ?.plus(MINIMUM_COMPLETION_GAP_MILLIS)
+        ?.takeIf { atMillis < it }
+
+    fun currentWallTimeMillis(): Long = wallNow()
+
     override fun onCleared() {
         player.release()
+        history.close()
+    }
+
+    companion object {
+        const val MINIMUM_COMPLETION_GAP_MILLIS = 8L * 60L * 60L * 1_000L
     }
 }

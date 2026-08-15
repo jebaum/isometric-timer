@@ -25,9 +25,11 @@ app/src/main/java/dev/jebaum/isometric/
   timer/Routine.kt         Monotonic elapsed-time model
   RoutineViewModel.kt      Survives rotation; decides which cue each tick implies
   SettingsStore.kt         Interface + SharedPreferences implementation
+  CompletionHistoryStore.kt  SQLite completion log and its testable interface
   cues/CuePlayer.kt        Cue types and the player interface
   cues/AndroidCuePlayer.kt ToneGenerator + VibrationEffect
-  ui/                      Compose screen, dialog, theme, icons
+  ui/HistoryDialog.kt      Month calendar derived from completion timestamps
+  ui/                      Compose screen, settings dialog, theme, icons
 app/src/test/java/dev/jebaum/isometric/
   CueDispatchTest.kt          The cue state machine's ordinary paths
   RoutineViewModelTest.kt     Its edges: pause, completion, toggle histories, lifecycle
@@ -51,6 +53,21 @@ second:
 and a stateless `TimerContent`, so every routine state — ready, running, the
 closing-seconds warning, rest, complete — has an `@Preview` rather than needing
 nine minutes of waiting to reach.
+
+## Routine history
+
+Finishing a routine appends its Unix timestamp to the local SQLite
+`completions` table. Ending an unfinished routine does not count. The calendar
+button shows one mark for one completion that day and two marks for two or more.
+
+After a completion, the ready screen shows when the recommended eight-hour gap
+ends. Starting sooner opens a warning with the choice to wait or start anyway;
+the interval is advisory rather than a hard lock. The routine itself continues
+to use a monotonic clock, while history deliberately uses wall-clock timestamps
+so it survives reboots and can be placed on a calendar. Those timestamps are
+stored as UTC Unix milliseconds: the eight-hour gap therefore measures real
+elapsed time across timezone changes, while status times and calendar dates are
+derived using the phone's current timezone.
 
 ## Portrait only
 

@@ -5,8 +5,11 @@ import dev.jebaum.isometric.cues.CuePlayer
 import dev.jebaum.isometric.timer.Kind
 import dev.jebaum.isometric.timer.Settings
 import dev.jebaum.isometric.timer.WARNING_SECONDS
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -32,6 +35,24 @@ private class Recorder : CuePlayer {
     }
 }
 
+private class History(initial: List<Long> = emptyList()) : CompletionHistoryStore {
+    val entries = initial.toMutableList()
+    var closes = 0
+
+    override fun record(completedAtMillis: Long) {
+        entries += completedAtMillis
+    }
+
+    override fun latest(): Long? = entries.maxOrNull()
+
+    override fun between(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long> =
+        entries.filter { it in startInclusiveMillis until endExclusiveMillis }.sorted()
+
+    override fun close() {
+        closes++
+    }
+}
+
 /**
  * Adversarial cover for [RoutineViewModel]: cue dispatch under pause, skip,
  * completion and cue-toggle histories, plus the lifecycle and settings
@@ -48,10 +69,14 @@ class RoutineViewModelTest {
     private fun model(
         settings: Settings = Settings(cycles = 2, hold = 5, switch = 2, rest = 4),
         cuesEnabled: Boolean = true,
+        history: CompletionHistoryStore = EmptyCompletionHistoryStore,
+        wallNow: () -> Long = { 0L },
     ) = RoutineViewModel(
         store = Store(settings, cuesEnabled),
         player = player,
         now = { time },
+        history = history,
+        wallNow = wallNow,
     )
 
     private fun run(m: RoutineViewModel, seconds: Double, step: Double = 1.0 / 60.0) {
@@ -166,13 +191,20 @@ class RoutineViewModelTest {
     }
 
     @Test
-    fun `skipping off the end announces done once and not again`() {
-        val m = model(Settings(cycles = 1, hold = 5, switch = 0, rest = 0))
+    fun `skipping off the end announces and records done once and not again`() {
+        val history = History()
+        val completedAt = 1_700_000_000_000L
+        val m = model(
+            settings = Settings(cycles = 1, hold = 5, switch = 0, rest = 0),
+            history = history,
+            wallNow = { completedAt },
+        )
         m.toggle()
         repeat(10) { time += 0.01; m.skip() }
 
         assertEquals(1, player.played.count { it is Cue.Done })
         assertEquals(2, player.played.count { it is Cue.Enter })
+        assertEquals(listOf(completedAt), history.entries)
     }
 
     /**
@@ -196,6 +228,86 @@ class RoutineViewModelTest {
             player.played.any { it is Cue.Done },
         )
         assertFalse("the tap should also have reset the routine", m.snapshot.started)
+    }
+
+    @Test
+    fun `completion is recorded exactly once even while cues are disabled`() {
+        val history = History()
+        val completedAt = 1_700_000_000_000L
+        val m = model(
+            settings = Settings(cycles = 1, hold = 2, switch = 0, rest = 0),
+            cuesEnabled = false,
+            history = history,
+            wallNow = { completedAt },
+        )
+
+        m.toggle()
+        run(m, 10.0)
+        repeat(20) { time += 0.5; m.tick() }
+        repeat(5) { m.skip() }
+
+        assertEquals(listOf(completedAt), history.entries)
+        assertEquals(completedAt, m.lastCompletionAt)
+        assertEquals(1, m.historyVersion)
+        assertTrue(player.played.isEmpty())
+    }
+
+    @Test
+    fun `ending an unfinished routine does not enter history`() {
+        val history = History()
+        val m = model(
+            settings = Settings(cycles = 1, hold = 10, switch = 0, rest = 0),
+            history = history,
+        )
+
+        m.toggle()
+        run(m, 2.0)
+        m.reset()
+
+        assertTrue(history.entries.isEmpty())
+        assertNull(m.lastCompletionAt)
+    }
+
+    @Test
+    fun `spacing warning ends at exactly eight hours`() {
+        val completedAt = 1_700_000_000_000L
+        val eligibleAt = completedAt + RoutineViewModel.MINIMUM_COMPLETION_GAP_MILLIS
+        var wallTime = eligibleAt - 1L
+        val m = model(history = History(listOf(completedAt)), wallNow = { wallTime })
+
+        assertEquals(eligibleAt, m.spacingWarningAt())
+        wallTime = eligibleAt
+        assertNull(m.spacingWarningAt())
+    }
+
+    @Test
+    fun `eight hour gap uses elapsed UTC time across a west to east timezone change`() {
+        val westCoastCompletion = ZonedDateTime.of(
+            2026, 8, 15, 8, 0, 0, 0,
+            ZoneId.of("America/Los_Angeles"),
+        ).toInstant().toEpochMilli()
+        var eastCoastNow = ZonedDateTime.of(
+            2026, 8, 15, 16, 0, 0, 0,
+            ZoneId.of("America/New_York"),
+        ).toInstant().toEpochMilli()
+        val eligibleAt = westCoastCompletion + RoutineViewModel.MINIMUM_COMPLETION_GAP_MILLIS
+        val m = model(
+            history = History(listOf(westCoastCompletion)),
+            wallNow = { eastCoastNow },
+        )
+
+        // 8 AM Pacific to 4 PM Eastern looks like eight hours on the clocks,
+        // but represents only five elapsed hours. Eligibility is 7 PM Eastern.
+        assertEquals(eligibleAt, m.spacingWarningAt())
+        assertEquals(
+            19,
+            java.time.Instant.ofEpochMilli(eligibleAt)
+                .atZone(ZoneId.of("America/New_York"))
+                .hour,
+        )
+
+        eastCoastNow = eligibleAt
+        assertNull(m.spacingWarningAt())
     }
 
     // ---- settings contract -------------------------------------------------
@@ -299,11 +411,13 @@ class RoutineViewModelTest {
 
     @Test
     fun `onCleared releases the player exactly once`() {
-        val m = model()
+        val history = History()
+        val m = model(history = history)
         m.toggle()
         run(m, 2.0)
         m.javaClass.getDeclaredMethod("onCleared").apply { isAccessible = true }.invoke(m)
         assertEquals(1, player.releases)
+        assertEquals(1, history.closes)
     }
 
     /**
