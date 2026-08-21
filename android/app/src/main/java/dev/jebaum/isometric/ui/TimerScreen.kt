@@ -3,6 +3,7 @@ package dev.jebaum.isometric.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -85,6 +86,7 @@ import kotlinx.coroutines.delay
 fun TimerScreen(viewModel: RoutineViewModel) {
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var historyOpen by rememberSaveable { mutableStateOf(false) }
+    var weightOpen by rememberSaveable { mutableStateOf(false) }
     var spacingWarningAt by rememberSaveable { mutableStateOf<Long?>(null) }
     var wallTime by rememberSaveable { mutableLongStateOf(viewModel.currentWallTimeMillis()) }
     var currentZone by remember { mutableStateOf(ZoneId.systemDefault()) }
@@ -140,6 +142,9 @@ fun TimerScreen(viewModel: RoutineViewModel) {
         snapshot = viewModel.snapshot,
         progress = { viewModel.progress },
         settingsEnabled = !active,
+        weight = formatWeightLb(viewModel.weightLb),
+        weightEnabled = !active,
+        onWeight = { weightOpen = true },
         historyMessage = if (active) null else historyMessage,
         onToggle = {
             currentZone = ZoneId.systemDefault()
@@ -168,6 +173,17 @@ fun TimerScreen(viewModel: RoutineViewModel) {
             locale = locale,
             completionsBetween = viewModel::completionsBetween,
             onDismiss = { historyOpen = false },
+        )
+    }
+
+    if (weightOpen) {
+        WeightDialog(
+            initialLb = viewModel.weightLb,
+            onDismiss = { weightOpen = false },
+            onSave = { value ->
+                viewModel.updateWeight(value)
+                weightOpen = false
+            },
         )
     }
 
@@ -218,6 +234,9 @@ private fun TimerContent(
     /** A lambda so the per-frame value is read during draw, not composition. */
     progress: () -> Float,
     settingsEnabled: Boolean,
+    weight: String,
+    weightEnabled: Boolean,
+    onWeight: () -> Unit,
     historyMessage: String?,
     onToggle: () -> Unit,
     onSkip: () -> Unit,
@@ -271,6 +290,9 @@ private fun TimerContent(
                         accentStrong = accentStrong,
                         countdownColor = if (snapshot.warning) Palette.Warning else accent,
                         availableHeight = available,
+                        weight = weight,
+                        weightEnabled = weightEnabled,
+                        onWeight = onWeight,
                         historyMessage = historyMessage,
                         onToggle = onToggle,
                         onSkip = onSkip,
@@ -330,6 +352,9 @@ private fun TimerBody(
     accentStrong: Color,
     countdownColor: Color,
     availableHeight: Dp,
+    weight: String,
+    weightEnabled: Boolean,
+    onWeight: () -> Unit,
     historyMessage: String?,
     onToggle: () -> Unit,
     onSkip: () -> Unit,
@@ -373,6 +398,9 @@ private fun TimerBody(
         MetaRow(
             total = clock(snapshot.totalLeft),
             cycle = "${snapshot.cycle} / ${snapshot.cycles}",
+            weight = weight,
+            weightEnabled = weightEnabled,
+            onWeight = onWeight,
             accent = accent,
         )
         Spacer(Modifier.height(22.dp))
@@ -501,17 +529,42 @@ private fun ProgressTrack(progress: () -> Float, accent: Color, accentStrong: Co
 }
 
 @Composable
-private fun MetaRow(total: String, cycle: String, accent: Color) {
+private fun MetaRow(
+    total: String,
+    cycle: String,
+    weight: String,
+    weightEnabled: Boolean,
+    onWeight: () -> Unit,
+    accent: Color,
+) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         MetaCell("TOTAL", total, accent, Modifier.weight(1f))
-        Box(
-            Modifier
-                .width(1.dp)
-                .height(38.dp)
-                .background(Palette.Border),
-        )
+        MetaDivider()
         MetaCell("CYCLE", cycle, accent, Modifier.weight(1f))
+        MetaDivider()
+        MetaCell(
+            "WEIGHT",
+            weight,
+            accent,
+            Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(10.dp))
+                // Enabled only while idle, mirroring the settings button, so
+                // the recorded weight cannot change mid-session.
+                .clickable(enabled = weightEnabled, onClick = onWeight)
+                .semantics { contentDescription = "Hold weight $weight" },
+        )
     }
+}
+
+@Composable
+private fun MetaDivider() {
+    Box(
+        Modifier
+            .width(1.dp)
+            .height(38.dp)
+            .background(Palette.Border),
+    )
 }
 
 @Composable
@@ -640,6 +693,9 @@ private fun PreviewFrame(snapshot: Snapshot, progress: Float) {
             snapshot = snapshot,
             progress = { progress },
             settingsEnabled = !snapshot.started || snapshot.done,
+            weight = "12.5 lb",
+            weightEnabled = !snapshot.started || snapshot.done,
+            onWeight = {},
             historyMessage = if (snapshot.started && !snapshot.done) {
                 null
             } else {
@@ -698,5 +754,13 @@ private fun SettingsPreview() {
             onDismiss = {},
             onSave = { _, _ -> },
         )
+    }
+}
+
+@Preview(name = "Weight dialog", showBackground = true)
+@Composable
+private fun WeightPreview() {
+    IsometricTheme {
+        WeightDialog(initialLb = 12.5, onDismiss = {}, onSave = {})
     }
 }
