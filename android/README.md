@@ -28,6 +28,7 @@ app/src/main/java/dev/jebaum/isometric/
 app/src/test/java/dev/jebaum/isometric/
   CueDispatchTest.kt          The cue state machine's ordinary paths
   RoutineViewModelTest.kt     Its edges: pause, completion, toggle histories, lifecycle
+  PreferenceSaves.kt          FakeSettingsStore and the shared Save helpers
   timer/RoutineTest.kt        Schedule construction, validation, and clock formatting
   timer/RoutineEdgeTest.kt    Boundary arithmetic: exact marks, skip, drift, clamping
   timer/ScheduleEdgeTest.kt   The edges of the settings dialog's accepted range

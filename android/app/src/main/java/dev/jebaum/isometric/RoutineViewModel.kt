@@ -1,7 +1,6 @@
 package dev.jebaum.isometric
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,15 +55,19 @@ class RoutineViewModel(
         }
     }
 
-    var settings: Settings by mutableStateOf(store.load())
-        private set
+    /**
+     * The saved state, held as the one value it is saved as. Exposed field by
+     * field below so callers read what they need, but written only through
+     * [persist] — there is no way to update one part and leave the rest behind.
+     */
+    private var preferences: RoutinePreferences by mutableStateOf(store.load())
 
-    var cuesEnabled: Boolean by mutableStateOf(store.cuesEnabled)
-        private set
+    val settings: Settings get() = preferences.settings
+
+    val cuesEnabled: Boolean get() = preferences.cuesEnabled
 
     /** Hold weight in pounds; 0 means bodyweight only. */
-    var weightLb: Double by mutableDoubleStateOf(store.weightLb)
-        private set
+    val weightLb: Double get() = preferences.weightLb
 
     var lastCompletionAt: Long? by mutableStateOf(history.latest())
         private set
@@ -180,30 +183,51 @@ class RoutineViewModel(
         progress = routine.progress()
     }
 
-    fun updateSettings(value: Settings) {
-        // Checked before anything is mutated or persisted: `reset()` would throw
-        // out of buildSchedule *after* the bad value had already reached disk.
-        require(value.isValid()) { "settings outside the accepted range: $value" }
-        settings = value
-        store.save(value)
-        reset()
-    }
-
-    fun updateCuesEnabled(enabled: Boolean) {
-        cuesEnabled = enabled
-        store.cuesEnabled = enabled
-        if (enabled) cueState = CueState.syncedTo(snapshot)
+    /** The only way saved state changes: in memory and on disk together. */
+    private fun persist(next: RoutinePreferences) {
+        // In memory first, then best-effort to disk: a store that throws must not
+        // leave the user staring at a dialog that refused a valid Save, or take
+        // out the routine. The SharedPreferences implementation writes through
+        // `apply()`, which reports no failures anyway.
+        preferences = next
+        runCatching { store.save(next) }
     }
 
     /**
-     * Unlike [updateSettings] this must not reset the routine: the weight does
-     * not change the schedule, only what a completion records.
+     * The settings dialog's Save, applied as one transaction. The dialog stages
+     * both fields and commits them together, so a partial application — cues
+     * saved and settings rejected — is a state the user never asked for.
+     */
+    fun updatePreferences(settings: Settings, cuesEnabled: Boolean) {
+        // Checked before anything is mutated or persisted: `reset()` would throw
+        // out of buildSchedule *after* the bad value had already reached disk.
+        require(settings.isValid()) { "settings outside the accepted range: $settings" }
+        val settingsChanged = settings != preferences.settings
+        persist(preferences.copy(settings = settings, cuesEnabled = cuesEnabled))
+
+        // A finished routine resets too, even when nothing about the schedule
+        // moved: saving from the completion screen is how you get back to READY,
+        // and leaving it done would strand the Save behind a "Done" button.
+        if (settingsChanged || snapshot.done) {
+            // Once. `reset()` clears the cue state itself, so there is nothing
+            // left to resynchronize afterwards.
+            reset()
+        } else if (cuesEnabled) {
+            // The screen disables settings while a routine is running, but the
+            // view model does not depend on that: turning cues on part way
+            // through must not re-announce what has already gone by.
+            cueState = CueState.syncedTo(snapshot)
+        }
+    }
+
+    /**
+     * Unlike [updatePreferences] this must not rebuild the routine: the weight
+     * does not change the schedule, only what a completion records. It is the
+     * one preference editable mid-routine.
      */
     fun updateWeight(valueLb: Double) {
         require(isValidWeightLb(valueLb)) { "weight outside the accepted range: $valueLb" }
-        val quantized = quantizeWeightLb(valueLb)
-        weightLb = quantized
-        store.weightLb = quantized
+        persist(preferences.copy(weightLb = quantizeWeightLb(valueLb)))
     }
 
     fun weightHistory(): List<WeightedCompletion> = history.weightHistory()

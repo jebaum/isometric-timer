@@ -8,17 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private class FakeSettingsStore(
-    private var settings: Settings,
-    override var cuesEnabled: Boolean = true,
-    override var weightLb: Double = 0.0,
-) : SettingsStore {
-    override fun load(): Settings = settings
-    override fun save(settings: Settings) {
-        this.settings = settings
-    }
-}
-
 private class RecordingCuePlayer(private val onPlay: (Cue) -> Unit = {}) : CuePlayer {
     val played = mutableListOf<Cue>()
     override fun play(cue: Cue) {
@@ -70,15 +59,15 @@ class CueDispatchTest {
     }
 
     /**
-     * Regression: the resync in `updateCuesEnabled` used to overwrite the
-     * "nothing cued yet" sentinel with index 0 — the index the opening phase is
-     * about to have — so the routine began in silence.
+     * Regression: the cue resync used to overwrite the "nothing cued yet"
+     * sentinel with index 0 — the index the opening phase is about to have — so
+     * the routine began in silence.
      */
     @Test
     fun `enabling cues before Start still cues the opening hold`() {
         val model = viewModel(cuesEnabled = false)
 
-        model.updateCuesEnabled(true)
+        model.setCues(true)
         model.toggle()
 
         assertEquals(listOf<Cue>(Cue.Enter(Kind.HOLD)), player.played)
@@ -88,8 +77,8 @@ class CueDispatchTest {
     fun `flipping cues off then on before Start still cues the opening hold`() {
         val model = viewModel()
 
-        model.updateCuesEnabled(false)
-        model.updateCuesEnabled(true)
+        model.setCues(false)
+        model.setCues(true)
         model.toggle()
 
         assertEquals(listOf<Cue>(Cue.Enter(Kind.HOLD)), player.played)
@@ -197,7 +186,7 @@ class CueDispatchTest {
         run(model, 6.0)
         player.played.clear()
 
-        model.updateSettings(Settings(cycles = 1, hold = 3, switch = 0, rest = 0))
+        model.setSettings(Settings(cycles = 1, hold = 3, switch = 0, rest = 0))
         assertTrue(player.played.isEmpty())
         assertTrue(!model.snapshot.started)
 

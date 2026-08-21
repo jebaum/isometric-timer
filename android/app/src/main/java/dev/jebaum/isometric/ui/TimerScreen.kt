@@ -197,8 +197,7 @@ fun TimerScreen(viewModel: RoutineViewModel) {
             initialCuesEnabled = viewModel.cuesEnabled,
             onDismiss = { settingsOpen = false },
             onSave = { settings, cuesEnabled ->
-                viewModel.updateCuesEnabled(cuesEnabled)
-                viewModel.updateSettings(settings)
+                viewModel.updatePreferences(settings, cuesEnabled)
                 settingsOpen = false
             },
         )
