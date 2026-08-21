@@ -2,6 +2,7 @@ package dev.jebaum.isometric.timer
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -11,7 +12,7 @@ import org.junit.Test
  */
 class RoutineEdgeTest {
 
-    private val short = Settings(cycles = 1, hold = 5, switch = 0, rest = 0)
+    private val short = Settings(cycles = 1, holdSeconds = 5, switchSeconds = 0, restSeconds = 0)
 
     @Test
     fun `elapsed exactly on a mark advances to the new phase with a full countdown`() {
@@ -19,10 +20,12 @@ class RoutineEdgeTest {
         val routine = Routine(buildSchedule(short), now = { time }, startPaused = false)
         time = 5.0
         val s = routine.snapshot()
-        assertEquals(LABEL_LEFT, s.phase.label)
+        assertEquals(PhaseId.LEFT_HOLD, s.phase.id)
         assertEquals(5, s.secondsLeft)
         assertEquals(0f, routine.progress(), 1e-6f)
         assertEquals(RoutineStatus.RUNNING, s.status)
+        // Still running, but standing on the last phase: nothing follows it.
+        assertNull("the last phase has no next", s.next)
     }
 
     @Test
@@ -35,7 +38,7 @@ class RoutineEdgeTest {
         assertEquals(routine.phases.size - 1, s.index)
         assertEquals(0, s.secondsLeft)
         assertEquals(0, s.totalLeft)
-        assertEquals("DONE", s.next)
+        assertNull("a finished routine has no next phase", s.next)
         assertEquals(1f, routine.progress(), 1e-6f)
     }
 
@@ -55,7 +58,7 @@ class RoutineEdgeTest {
         var time = 0.0
         val routine = Routine(buildSchedule(short), now = { time }, startPaused = false)
         routine.skip() // -> LEFT SIDE
-        assertEquals(LABEL_LEFT, routine.snapshot().phase.label)
+        assertEquals(PhaseId.LEFT_HOLD, routine.snapshot().phase.id)
         routine.skip() // -> done
         assertEquals(RoutineStatus.COMPLETE, routine.status())
         assertEquals(RoutineStatus.COMPLETE, routine.snapshot().status)
@@ -142,14 +145,14 @@ class RoutineEdgeTest {
     }
 
     @Test
-    fun `clock formats minutes and seconds, clamping below zero`() {
-        assertEquals("0:00", clock(0))
-        assertEquals("0:00", clock(-1))
-        assertEquals("0:09", clock(9))
-        assertEquals("1:00", clock(60))
-        assertEquals("9:30", clock(570))
-        assertEquals("60:00", clock(3600))
-        assertEquals("600:00", clock(36000))
+    fun `formatDuration renders minutes and seconds, clamping below zero`() {
+        assertEquals("0:00", formatDuration(0))
+        assertEquals("0:00", formatDuration(-1))
+        assertEquals("0:09", formatDuration(9))
+        assertEquals("1:00", formatDuration(60))
+        assertEquals("9:30", formatDuration(570))
+        assertEquals("60:00", formatDuration(3600))
+        assertEquals("600:00", formatDuration(36000))
     }
 
     @Test
@@ -189,7 +192,7 @@ class RoutineEdgeTest {
     fun `a single second hold still reports a full countdown at the start`() {
         var time = 0.0
         val routine = Routine(
-            buildSchedule(Settings(cycles = 1, hold = 1, switch = 0, rest = 0)),
+            buildSchedule(Settings(cycles = 1, holdSeconds = 1, switchSeconds = 0, restSeconds = 0)),
             now = { time },
             startPaused = false,
         )
@@ -197,15 +200,15 @@ class RoutineEdgeTest {
         time = 0.999
         assertEquals(1, routine.snapshot().secondsLeft)
         time = 1.0
-        assertEquals(LABEL_LEFT, routine.snapshot().phase.label)
+        assertEquals(PhaseId.LEFT_HOLD, routine.snapshot().phase.id)
         assertEquals(1, routine.snapshot().secondsLeft)
     }
 
     @Test
-    fun `snapshot warning equals the web predicate for every tick of a routine`() {
+    fun `snapshot warning equals the reference predicate for every tick of a routine`() {
         var time = 4_223.456
         val routine = Routine(
-            buildSchedule(Settings(cycles = 3, hold = 4, switch = 2, rest = 3)),
+            buildSchedule(Settings(cycles = 3, holdSeconds = 4, switchSeconds = 2, restSeconds = 3)),
             now = { time },
             startPaused = false,
         )
@@ -214,7 +217,7 @@ class RoutineEdgeTest {
             val s = routine.snapshot()
             // The warning flag is exactly "a hold is within its closing seconds".
             val expected =
-                s.phase.kind == Kind.HOLD &&
+                s.phase.kind == PhaseKind.HOLD &&
                     s.secondsLeft <= WARNING_SECONDS &&
                     s.status != RoutineStatus.COMPLETE
             assertEquals("at t=$time snapshot=$s", expected, s.warning)
@@ -229,7 +232,7 @@ class RoutineEdgeTest {
     fun `secondsLeft is never zero unless the routine is done`() {
         var time = 0.0
         val routine = Routine(
-            buildSchedule(Settings(cycles = 2, hold = 1, switch = 1, rest = 1)),
+            buildSchedule(Settings(cycles = 2, holdSeconds = 1, switchSeconds = 1, restSeconds = 1)),
             now = { time },
             startPaused = false,
         )
@@ -246,7 +249,7 @@ class RoutineEdgeTest {
     fun `snapshot equality is not fooled by the derived warning flag`() {
         var time = 0.0
         val routine = Routine(
-            buildSchedule(Settings(cycles = 1, hold = 5, switch = 0, rest = 0)),
+            buildSchedule(Settings(cycles = 1, holdSeconds = 5, switchSeconds = 0, restSeconds = 0)),
             now = { time },
             startPaused = false,
         )
@@ -267,7 +270,7 @@ class RoutineEdgeTest {
     @Test
     fun `snapshotAt and progressAt agree when fed one elapsed value`() {
         val routine = Routine(
-            buildSchedule(Settings(cycles = 2, hold = 5, switch = 2, rest = 3)),
+            buildSchedule(Settings(cycles = 2, holdSeconds = 5, switchSeconds = 2, restSeconds = 3)),
             now = { 0.0 },
             startPaused = false,
         )

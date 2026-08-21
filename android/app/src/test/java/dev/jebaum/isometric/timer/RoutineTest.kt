@@ -1,6 +1,7 @@
 package dev.jebaum.isometric.timer
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -15,42 +16,62 @@ class RoutineTest {
         val phases = buildSchedule(DEFAULT_SETTINGS)
         assertEquals(15, phases.size)
         assertEquals(570, phases.sumOf { it.seconds })
-        assertEquals(LABEL_LEFT, phases.last().label)
-        assertEquals(Kind.HOLD, phases.last().kind)
+        assertEquals(PhaseId.LEFT_HOLD, phases.last().id)
+        assertEquals(PhaseKind.HOLD, phases.last().kind)
         assertEquals(
             listOf(
-                LABEL_RIGHT, LABEL_SWITCH, LABEL_LEFT, LABEL_REST,
-                LABEL_RIGHT, LABEL_SWITCH, LABEL_LEFT, LABEL_REST,
-                LABEL_RIGHT, LABEL_SWITCH, LABEL_LEFT, LABEL_REST,
-                LABEL_RIGHT, LABEL_SWITCH, LABEL_LEFT,
+                PhaseId.RIGHT_HOLD, PhaseId.SWITCH, PhaseId.LEFT_HOLD, PhaseId.REST,
+                PhaseId.RIGHT_HOLD, PhaseId.SWITCH, PhaseId.LEFT_HOLD, PhaseId.REST,
+                PhaseId.RIGHT_HOLD, PhaseId.SWITCH, PhaseId.LEFT_HOLD, PhaseId.REST,
+                PhaseId.RIGHT_HOLD, PhaseId.SWITCH, PhaseId.LEFT_HOLD,
             ),
-            phases.map { it.label },
+            phases.map { it.id },
         )
     }
 
     @Test
+    fun `a phase sounds like the phase it is`() {
+        // The whole point of the typed identity: the cue category is read off
+        // the phase rather than stored beside it, so there is no phase that
+        // can be called one thing and sound like another. Both holds share a
+        // cue; the other two do not.
+        assertEquals(
+            listOf(PhaseKind.HOLD, PhaseKind.SWITCH, PhaseKind.HOLD, PhaseKind.REST),
+            PhaseId.entries.map { it.kind },
+        )
+    }
+
+    @Test
+    fun `the next phase is the one the schedule actually runs next`() {
+        var time = 0.0
+        val routine = Routine(buildSchedule(DEFAULT_SETTINGS), now = { time }, startPaused = false)
+        time = 1.0
+        assertEquals(routine.phases[1], routine.snapshot().next)
+    }
+
+    @Test
     fun `custom durations are exact and the final cycle has no rest`() {
-        val phases = buildSchedule(Settings(cycles = 2, hold = 5, switch = 2, rest = 4))
+        val phases = buildSchedule(Settings(cycles = 2, holdSeconds = 5, switchSeconds = 2, restSeconds = 4))
         assertEquals(listOf(5, 2, 5, 4, 5, 2, 5), phases.map { it.seconds })
         assertEquals(2, phases.last().cycle)
     }
 
     @Test
     fun `zero switch and rest durations omit those phases`() {
-        val phases = buildSchedule(Settings(cycles = 2, hold = 5, switch = 0, rest = 0))
+        val phases = buildSchedule(Settings(cycles = 2, holdSeconds = 5, switchSeconds = 0, restSeconds = 0))
         assertEquals(
-            listOf(LABEL_RIGHT, LABEL_LEFT, LABEL_RIGHT, LABEL_LEFT),
-            phases.map { it.label },
+            listOf(PhaseId.RIGHT_HOLD, PhaseId.LEFT_HOLD, PhaseId.RIGHT_HOLD, PhaseId.LEFT_HOLD),
+            phases.map { it.id },
         )
     }
 
     @Test
     fun `invalid schedule values are rejected`() {
         val invalid = listOf(
-            Settings(cycles = 0, hold = 35, switch = 5, rest = 90),
-            Settings(cycles = 4, hold = 0, switch = 5, rest = 90),
-            Settings(cycles = 4, hold = 35, switch = -1, rest = 90),
-            Settings(cycles = 4, hold = 35, switch = 5, rest = -1),
+            Settings(cycles = 0, holdSeconds = 35, switchSeconds = 5, restSeconds = 90),
+            Settings(cycles = 4, holdSeconds = 0, switchSeconds = 5, restSeconds = 90),
+            Settings(cycles = 4, holdSeconds = 35, switchSeconds = -1, restSeconds = 90),
+            Settings(cycles = 4, holdSeconds = 35, switchSeconds = 5, restSeconds = -1),
         )
         for (settings in invalid) {
             assertThrows(IllegalArgumentException::class.java) { buildSchedule(settings) }
@@ -58,12 +79,12 @@ class RoutineTest {
     }
 
     @Test
-    fun `cumulative marks and clock formatting line up`() {
+    fun `cumulative marks and duration formatting line up`() {
         val phases = buildSchedule(DEFAULT_SETTINGS)
         assertEquals(570, cumulative(phases).last())
-        assertEquals("9:30", clock(570))
-        assertEquals("1:15", clock(75))
-        assertEquals("0:00", clock(-2))
+        assertEquals("9:30", formatDuration(570))
+        assertEquals("1:15", formatDuration(75))
+        assertEquals("0:00", formatDuration(-2))
     }
 
     @Test
@@ -91,7 +112,7 @@ class RoutineTest {
     fun `status moves ready to running to paused to running to complete`() {
         var time = 0.0
         val routine = Routine(
-            buildSchedule(Settings(cycles = 1, hold = 5, switch = 0, rest = 0)),
+            buildSchedule(Settings(cycles = 1, holdSeconds = 5, switchSeconds = 0, restSeconds = 0)),
             now = { time },
         )
         assertEquals(RoutineStatus.READY, routine.status())
@@ -136,12 +157,12 @@ class RoutineTest {
 
         routine.skip()
         assertEquals(35.0, routine.elapsed(), TOLERANCE)
-        assertEquals(LABEL_SWITCH, routine.snapshot().phase.label)
+        assertEquals(PhaseId.SWITCH, routine.snapshot().phase.id)
 
         routine.togglePause()
         time = 115.0
         assertEquals(40.0, routine.elapsed(), TOLERANCE)
-        assertEquals(LABEL_LEFT, routine.snapshot().phase.label)
+        assertEquals(PhaseId.LEFT_HOLD, routine.snapshot().phase.id)
     }
 
     @Test
@@ -158,7 +179,7 @@ class RoutineTest {
         assertEquals(RoutineStatus.COMPLETE, snapshot.status)
         assertEquals(0, snapshot.secondsLeft)
         assertEquals(0, snapshot.totalLeft)
-        assertEquals("DONE", snapshot.next)
+        assertNull("a finished routine has no next phase", snapshot.next)
     }
 
     @Test

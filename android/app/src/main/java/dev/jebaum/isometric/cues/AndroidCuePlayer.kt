@@ -11,7 +11,7 @@ import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import dev.jebaum.isometric.timer.Kind
+import dev.jebaum.isometric.timer.PhaseKind
 
 /**
  * Sound and vibration for phase boundaries.
@@ -64,15 +64,15 @@ class AndroidCuePlayer(context: Context) : CuePlayer {
         if (released) return
         when (cue) {
             is Cue.Enter -> when (cue.kind) {
-                Kind.HOLD -> {
+                PhaseKind.HOLD -> {
                     tone(ToneGenerator.TONE_PROP_BEEP2, 300)
                     vibrate(VibrationEffect.createWaveform(longArrayOf(0, 90, 80, 90), -1))
                 }
-                Kind.SWITCH -> {
+                PhaseKind.SWITCH -> {
                     tone(ToneGenerator.TONE_PROP_BEEP, 150)
                     vibrate(VibrationEffect.createOneShot(70, VibrationEffect.DEFAULT_AMPLITUDE))
                 }
-                Kind.REST -> {
+                PhaseKind.REST -> {
                     tone(ToneGenerator.TONE_PROP_ACK, 250)
                     vibrate(VibrationEffect.createOneShot(140, VibrationEffect.DEFAULT_AMPLITUDE))
                 }

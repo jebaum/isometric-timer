@@ -2,7 +2,8 @@ package dev.jebaum.isometric
 
 import dev.jebaum.isometric.cues.Cue
 import dev.jebaum.isometric.cues.CuePlayer
-import dev.jebaum.isometric.timer.Kind
+import dev.jebaum.isometric.timer.PhaseId
+import dev.jebaum.isometric.timer.PhaseKind
 import dev.jebaum.isometric.timer.RoutineStatus
 import dev.jebaum.isometric.timer.Settings
 import dev.jebaum.isometric.timer.WARNING_SECONDS
@@ -64,7 +65,7 @@ class RoutineViewModelTest {
     private val player = Recorder()
 
     private fun model(
-        settings: Settings = Settings(cycles = 2, hold = 5, switch = 2, rest = 4),
+        settings: Settings = Settings(cycles = 2, holdSeconds = 5, switchSeconds = 2, restSeconds = 4),
         cuesEnabled: Boolean = true,
         history: CompletionHistoryStore = EmptyCompletionHistoryStore,
         wallNow: () -> Long = { 0L },
@@ -76,7 +77,7 @@ class RoutineViewModelTest {
         wallNow = wallNow,
     )
 
-    private fun run(m: RoutineViewModel, seconds: Double, step: Double = 1.0 / 60.0) {
+    private fun advanceBy(m: RoutineViewModel, seconds: Double, step: Double = 1.0 / 60.0) {
         repeat((seconds / step).toInt()) {
             time += step
             if (m.running) m.tick()
@@ -87,9 +88,9 @@ class RoutineViewModelTest {
 
     @Test
     fun `enabling cues while paused mid-hold neither swallows nor duplicates`() {
-        val m = model(Settings(cycles = 1, hold = 10, switch = 0, rest = 0))
+        val m = model(Settings(cycles = 1, holdSeconds = 10, switchSeconds = 0, restSeconds = 0))
         m.toggle()
-        run(m, 8.2) // ~1.8s left: Warn(3) and Warn(2) have fired
+        advanceBy(m, 8.2) // ~1.8s left: Warn(3) and Warn(2) have fired
         m.toggle() // pause
         val warnsBefore = player.played.count { it is Cue.Warn }
         val secondsLeft = m.snapshot.secondsLeft
@@ -106,30 +107,30 @@ class RoutineViewModelTest {
         assertEquals(1, player.played.count { it is Cue.Enter })
 
         // The remaining warning seconds must still fire.
-        run(m, secondsLeft + 0.5)
+        advanceBy(m, secondsLeft + 0.5)
         assertEquals(WARNING_SECONDS, player.played.count { it is Cue.Warn })
     }
 
     @Test
     fun `enabling cues mid-hold outside the warning window still warns three times`() {
-        val m = model(Settings(cycles = 1, hold = 30, switch = 0, rest = 0))
+        val m = model(Settings(cycles = 1, holdSeconds = 30, switchSeconds = 0, restSeconds = 0))
         m.toggle()
-        run(m, 5.0) // 25s left, far outside the window
+        advanceBy(m, 5.0) // 25s left, far outside the window
         m.toggle() // pause
         m.setCues(false)
         m.setCues(true)
         m.toggle() // resume
-        run(m, 30.0)
+        advanceBy(m, 30.0)
 
         assertEquals(WARNING_SECONDS, player.played.count { it is Cue.Warn })
     }
 
     @Test
     fun `a phase boundary crossed while cues are off is not announced retroactively`() {
-        val m = model(Settings(cycles = 1, hold = 4, switch = 2, rest = 0))
+        val m = model(Settings(cycles = 1, holdSeconds = 4, switchSeconds = 2, restSeconds = 0))
         m.toggle() // Enter(HOLD)
         m.setCues(false)
-        run(m, 4.5) // crosses into SWITCH silently
+        advanceBy(m, 4.5) // crosses into SWITCH silently
         player.played.clear()
         m.toggle() // pause
         m.setCues(true)
@@ -142,9 +143,9 @@ class RoutineViewModelTest {
 
         // The *next* boundary must still announce. A 4s hold is inside the
         // warning window one second in, so filter to the boundary cue.
-        run(m, 3.0)
+        advanceBy(m, 3.0)
         assertEquals(
-            listOf<Cue>(Cue.Enter(Kind.HOLD)),
+            listOf<Cue>(Cue.Enter(PhaseKind.HOLD)),
             player.played.filterIsInstance<Cue.Enter>(),
         )
     }
@@ -161,13 +162,13 @@ class RoutineViewModelTest {
             val recorder = Recorder()
             val m = RoutineViewModel(FakeSettingsStore(Settings(1, 3, 0, 0)), recorder, { time })
             m.toggle()
-            run(m, 1.0)
+            advanceBy(m, 1.0)
             m.reset()
             script.forEach(m::setCues)
             recorder.played.clear()
             m.toggle()
             if (script.last()) {
-                assertEquals("script=$script", listOf<Cue>(Cue.Enter(Kind.HOLD)), recorder.played)
+                assertEquals("script=$script", listOf<Cue>(Cue.Enter(PhaseKind.HOLD)), recorder.played)
             } else {
                 assertTrue("script=$script", recorder.played.isEmpty())
             }
@@ -178,9 +179,9 @@ class RoutineViewModelTest {
 
     @Test
     fun `done is announced exactly once no matter how many ticks follow`() {
-        val m = model(Settings(cycles = 1, hold = 2, switch = 0, rest = 0))
+        val m = model(Settings(cycles = 1, holdSeconds = 2, switchSeconds = 0, restSeconds = 0))
         m.toggle()
-        run(m, 10.0)
+        advanceBy(m, 10.0)
         repeat(20) { time += 0.5; m.tick() }
         repeat(5) { m.skip() }
 
@@ -192,7 +193,7 @@ class RoutineViewModelTest {
         val history = History()
         val completedAt = 1_700_000_000_000L
         val m = model(
-            settings = Settings(cycles = 1, hold = 5, switch = 0, rest = 0),
+            settings = Settings(cycles = 1, holdSeconds = 5, switchSeconds = 0, restSeconds = 0),
             history = history,
             wallNow = { completedAt },
         )
@@ -211,9 +212,9 @@ class RoutineViewModelTest {
      */
     @Test
     fun `tapping the button in the frame the routine completes still announces done`() {
-        val m = model(Settings(cycles = 1, hold = 2, switch = 0, rest = 0))
+        val m = model(Settings(cycles = 1, holdSeconds = 2, switchSeconds = 0, restSeconds = 0))
         m.toggle()
-        run(m, 3.9) // still inside the routine (total 4s)
+        advanceBy(m, 3.9) // still inside the routine (total 4s)
         assertEquals(RoutineStatus.RUNNING, m.snapshot.status)
         player.played.clear()
 
@@ -236,14 +237,14 @@ class RoutineViewModelTest {
         val history = History()
         val completedAt = 1_700_000_000_000L
         val m = model(
-            settings = Settings(cycles = 1, hold = 2, switch = 0, rest = 0),
+            settings = Settings(cycles = 1, holdSeconds = 2, switchSeconds = 0, restSeconds = 0),
             cuesEnabled = false,
             history = history,
             wallNow = { completedAt },
         )
 
         m.toggle()
-        run(m, 10.0)
+        advanceBy(m, 10.0)
         repeat(20) { time += 0.5; m.tick() }
         repeat(5) { m.skip() }
 
@@ -257,12 +258,12 @@ class RoutineViewModelTest {
     fun `ending an unfinished routine does not enter history`() {
         val history = History()
         val m = model(
-            settings = Settings(cycles = 1, hold = 10, switch = 0, rest = 0),
+            settings = Settings(cycles = 1, holdSeconds = 10, switchSeconds = 0, restSeconds = 0),
             history = history,
         )
 
         m.toggle()
-        run(m, 2.0)
+        advanceBy(m, 2.0)
         m.reset()
 
         assertTrue(history.entries.isEmpty())
@@ -318,14 +319,14 @@ class RoutineViewModelTest {
         val history = History()
         val completedAt = 1_700_000_000_000L
         val m = model(
-            settings = Settings(cycles = 1, hold = 2, switch = 0, rest = 0),
+            settings = Settings(cycles = 1, holdSeconds = 2, switchSeconds = 0, restSeconds = 0),
             history = history,
             wallNow = { completedAt },
         )
 
         m.updateWeight(12.5)
         m.toggle()
-        run(m, 6.0)
+        advanceBy(m, 6.0)
 
         assertEquals(listOf(WeightedCompletion(completedAt, 12.5)), history.weightHistory())
     }
@@ -351,7 +352,7 @@ class RoutineViewModelTest {
     fun `updating the weight does not disturb an active routine`() {
         val m = model()
         m.toggle()
-        run(m, 2.0)
+        advanceBy(m, 2.0)
         val before = m.snapshot
 
         m.updateWeight(20.0)
@@ -392,7 +393,7 @@ class RoutineViewModelTest {
         val m = RoutineViewModel(store, player, { time })
 
         m.toggle()
-        run(m, 3.0)
+        advanceBy(m, 3.0)
         m.reset()
 
         assertEquals("something persisted without a Save", 0, store.writes)
@@ -423,7 +424,7 @@ class RoutineViewModelTest {
         val original = RoutinePreferences(Settings(2, 5, 2, 4), cuesEnabled = false)
         val store = FakeSettingsStore(original.settings, original.cuesEnabled)
         val m = RoutineViewModel(store, player, { time })
-        val bad = Settings(cycles = 0, hold = 35, switch = 5, rest = 90)
+        val bad = Settings(cycles = 0, holdSeconds = 35, switchSeconds = 5, restSeconds = 90)
 
         val thrown = runCatching { m.updatePreferences(bad, cuesEnabled = true) }.exceptionOrNull()
 
@@ -449,7 +450,7 @@ class RoutineViewModelTest {
                 { time },
             )
             m.toggle()
-            run(m, 3.0)
+            advanceBy(m, 3.0)
             recorder.played.clear()
 
             m.updatePreferences(Settings(1, 3, 0, 0), cuesEnabled = true)
@@ -458,7 +459,7 @@ class RoutineViewModelTest {
             assertTrue("the rebuild announced something: ${recorder.played}", recorder.played.isEmpty())
 
             m.toggle()
-            assertEquals("cuesWereOn=$cuesWereOn", listOf<Cue>(Cue.Enter(Kind.HOLD)), recorder.played)
+            assertEquals("cuesWereOn=$cuesWereOn", listOf<Cue>(Cue.Enter(PhaseKind.HOLD)), recorder.played)
         }
     }
 
@@ -469,11 +470,11 @@ class RoutineViewModelTest {
      */
     @Test
     fun `a save that leaves the schedule alone does not disturb a running routine`() {
-        val settings = Settings(cycles = 1, hold = 30, switch = 0, rest = 0)
+        val settings = Settings(cycles = 1, holdSeconds = 30, switchSeconds = 0, restSeconds = 0)
         val store = FakeSettingsStore(settings, cuesEnabled = false)
         val m = RoutineViewModel(store, player, { time })
         m.toggle()
-        run(m, 5.0) // 25s left, far outside the warning window
+        advanceBy(m, 5.0) // 25s left, far outside the warning window
         val before = m.snapshot
 
         m.updatePreferences(settings, cuesEnabled = true)
@@ -484,7 +485,7 @@ class RoutineViewModelTest {
         assertEquals(RoutinePreferences(settings, cuesEnabled = true), store.saved)
 
         // The rest of the hold still announces normally.
-        run(m, 30.0)
+        advanceBy(m, 30.0)
         assertEquals(WARNING_SECONDS, player.played.count { it is Cue.Warn })
     }
 
@@ -496,10 +497,10 @@ class RoutineViewModelTest {
      */
     @Test
     fun `a save from the completion screen returns the routine to ready`() {
-        val settings = Settings(cycles = 1, hold = 2, switch = 0, rest = 0)
+        val settings = Settings(cycles = 1, holdSeconds = 2, switchSeconds = 0, restSeconds = 0)
         val m = RoutineViewModel(FakeSettingsStore(settings), player, { time })
         m.toggle()
-        run(m, 6.0)
+        advanceBy(m, 6.0)
         assertEquals("the routine never finished", RoutineStatus.COMPLETE, m.snapshot.status)
 
         m.updatePreferences(settings, cuesEnabled = true)
@@ -551,13 +552,13 @@ class RoutineViewModelTest {
         val readings = ArrayDeque(listOf(0.0, 0.0, 4.999_999, 5.000_001))
         var last = 0.0
         val m = RoutineViewModel(
-            store = FakeSettingsStore(Settings(cycles = 1, hold = 5, switch = 0, rest = 0)),
+            store = FakeSettingsStore(Settings(cycles = 1, holdSeconds = 5, switchSeconds = 0, restSeconds = 0)),
             player = player,
             now = { (readings.removeFirstOrNull() ?: last).also { last = it } },
         )
         m.toggle()
 
-        assertEquals("RIGHT SIDE", m.snapshot.phase.label)
+        assertEquals(PhaseId.RIGHT_HOLD, m.snapshot.phase.id)
         assertEquals(1, m.snapshot.secondsLeft)
         assertEquals(RoutineStatus.RUNNING, m.snapshot.status)
         assertTrue(
@@ -568,9 +569,9 @@ class RoutineViewModelTest {
 
     @Test
     fun `progress is frozen while paused and pinned at one when done`() {
-        val m = model(Settings(cycles = 1, hold = 10, switch = 0, rest = 0))
+        val m = model(Settings(cycles = 1, holdSeconds = 10, switchSeconds = 0, restSeconds = 0))
         m.toggle()
-        run(m, 5.0)
+        advanceBy(m, 5.0)
         m.toggle() // pause
         val frozen = m.progress
         time += 60.0
@@ -578,7 +579,7 @@ class RoutineViewModelTest {
         assertEquals("progress moved while paused", frozen, m.progress, 1e-6f)
 
         m.toggle() // resume
-        run(m, 30.0)
+        advanceBy(m, 30.0)
         assertEquals(RoutineStatus.COMPLETE, m.snapshot.status)
         assertEquals(1f, m.progress, 0f)
         assertEquals(
@@ -595,7 +596,7 @@ class RoutineViewModelTest {
         val history = History()
         val m = model(history = history)
         m.toggle()
-        run(m, 2.0)
+        advanceBy(m, 2.0)
         m.javaClass.getDeclaredMethod("onCleared").apply { isAccessible = true }.invoke(m)
         assertEquals(1, player.releases)
         assertEquals(1, history.closes)
@@ -613,7 +614,7 @@ class RoutineViewModelTest {
             val recorder = Recorder()
             val m = RoutineViewModel(FakeSettingsStore(Settings(1, 4, 0, 0)), recorder, { time })
             m.toggle()
-            run(m, 1.2) // 3s left: Warn(3) has fired
+            advanceBy(m, 1.2) // 3s left: Warn(3) has fired
             stop(m)
             val before = recorder.played.size
 
@@ -631,13 +632,13 @@ class RoutineViewModelTest {
 
     @Test
     fun `holds of one two and three seconds warn once per remaining second`() {
-        for ((hold, expected) in listOf(1 to 1, 2 to 2, 3 to 3, 4 to 3, 35 to 3)) {
+        for ((holdSeconds, expected) in listOf(1 to 1, 2 to 2, 3 to 3, 4 to 3, 35 to 3)) {
             val recorder = Recorder()
-            val m = RoutineViewModel(FakeSettingsStore(Settings(1, hold, 0, 0)), recorder, { time })
+            val m = RoutineViewModel(FakeSettingsStore(Settings(1, holdSeconds, 0, 0)), recorder, { time })
             m.toggle()
-            run(m, hold * 2.0 + 1.0)
+            advanceBy(m, holdSeconds * 2.0 + 1.0)
             assertEquals(
-                "hold=$hold",
+                "holdSeconds=$holdSeconds",
                 expected * 2, // two holds per cycle
                 recorder.played.count { it is Cue.Warn },
             )
@@ -649,7 +650,7 @@ class RoutineViewModelTest {
         val m = model()
         m.toggle()
         m.toggle()
-        assertEquals(listOf<Cue>(Cue.Enter(Kind.HOLD)), player.played)
+        assertEquals(listOf<Cue>(Cue.Enter(PhaseKind.HOLD)), player.played)
         assertEquals(RoutineStatus.PAUSED, m.snapshot.status)
     }
 
@@ -663,7 +664,7 @@ class RoutineViewModelTest {
      */
     @Test
     fun `status walks the routine lifecycle one transition at a time`() {
-        val m = model(Settings(cycles = 1, hold = 5, switch = 0, rest = 0))
+        val m = model(Settings(cycles = 1, holdSeconds = 5, switchSeconds = 0, restSeconds = 0))
         assertEquals(RoutineStatus.READY, m.snapshot.status)
         assertFalse("the frame loop started before Start", m.running)
         assertFalse(m.active)
@@ -673,7 +674,7 @@ class RoutineViewModelTest {
         assertTrue("the frame loop did not start", m.running)
         assertTrue(m.active)
 
-        run(m, 2.0)
+        advanceBy(m, 2.0)
         m.toggle() // Pause
         assertEquals(RoutineStatus.PAUSED, m.snapshot.status)
         assertFalse("the frame loop kept running while paused", m.running)
@@ -683,7 +684,7 @@ class RoutineViewModelTest {
         assertEquals(RoutineStatus.RUNNING, m.snapshot.status)
         assertTrue(m.running)
 
-        run(m, 20.0) // past the 10s schedule
+        advanceBy(m, 20.0) // past the 10s schedule
         assertEquals(RoutineStatus.COMPLETE, m.snapshot.status)
         assertFalse("the frame loop kept running after the finish", m.running)
         assertFalse("a finished routine does not hold the screen awake", m.active)
@@ -696,24 +697,24 @@ class RoutineViewModelTest {
 
     @Test
     fun `skip advances phases without leaving RUNNING, and ending returns to READY`() {
-        val m = model(Settings(cycles = 1, hold = 5, switch = 2, rest = 0))
+        val m = model(Settings(cycles = 1, holdSeconds = 5, switchSeconds = 2, restSeconds = 0))
         m.toggle()
 
         m.skip()
-        assertEquals("SWITCH", m.snapshot.phase.label)
+        assertEquals(PhaseId.SWITCH, m.snapshot.phase.id)
         assertEquals(RoutineStatus.RUNNING, m.snapshot.status)
 
         m.reset()
         assertEquals(RoutineStatus.READY, m.snapshot.status)
-        assertEquals("RIGHT SIDE", m.snapshot.phase.label)
+        assertEquals(PhaseId.RIGHT_HOLD, m.snapshot.phase.id)
     }
 
     /** Skipping off the end while paused lands on COMPLETE, not PAUSED. */
     @Test
     fun `skipping off the end from a pause lands on COMPLETE`() {
-        val m = model(Settings(cycles = 1, hold = 5, switch = 0, rest = 0))
+        val m = model(Settings(cycles = 1, holdSeconds = 5, switchSeconds = 0, restSeconds = 0))
         m.toggle()
-        run(m, 1.0)
+        advanceBy(m, 1.0)
         m.toggle() // pause
         assertEquals(RoutineStatus.PAUSED, m.snapshot.status)
 

@@ -47,7 +47,14 @@ data class Snapshot(
     val phase: Phase,
     /** Index into [Routine.phases]; the cue layer keys transitions off this. */
     val index: Int,
-    val next: String,
+    /**
+     * What follows this phase, or null when nothing does — the routine is
+     * finished, or standing on its last phase. Null rather than a "DONE"
+     * string: the timer core has no business deciding what the screen calls
+     * the end of a routine, and a sentinel label is one the schedule could
+     * also, in principle, produce.
+     */
+    val next: Phase?,
     val secondsLeft: Int,
     val totalLeft: Int,
     val cycle: Int,
@@ -61,7 +68,7 @@ data class Snapshot(
      */
     val warning: Boolean
         get() = status != RoutineStatus.COMPLETE &&
-            phase.kind == Kind.HOLD &&
+            phase.kind == PhaseKind.HOLD &&
             secondsLeft in 1..WARNING_SECONDS
 }
 
@@ -157,7 +164,7 @@ class Routine(
         return Snapshot(
             phase = phase,
             index = index,
-            next = if (done) "DONE" else phases.getOrNull(index + 1)?.label ?: "DONE",
+            next = if (done) null else phases.getOrNull(index + 1),
             secondsLeft = if (done) 0 else maxOf(0, ceil(phase.seconds - into).toInt()),
             totalLeft = if (done) 0 else maxOf(0, ceil(total - elapsed).toInt()),
             cycle = phase.cycle,

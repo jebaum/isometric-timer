@@ -54,9 +54,9 @@ class PreferencesSettingsStore(context: Context) : SettingsStore {
     override fun load(): RoutinePreferences {
         val candidate = Settings(
             cycles = file.getInt(SettingsKeys.CYCLES, DEFAULT_SETTINGS.cycles),
-            hold = file.getInt(SettingsKeys.HOLD, DEFAULT_SETTINGS.hold),
-            switch = file.getInt(SettingsKeys.SWITCH, DEFAULT_SETTINGS.switch),
-            rest = file.getInt(SettingsKeys.REST, DEFAULT_SETTINGS.rest),
+            holdSeconds = file.getInt(SettingsKeys.HOLD, DEFAULT_SETTINGS.holdSeconds),
+            switchSeconds = file.getInt(SettingsKeys.SWITCH, DEFAULT_SETTINGS.switchSeconds),
+            restSeconds = file.getInt(SettingsKeys.REST, DEFAULT_SETTINGS.restSeconds),
         )
         val defaults = RoutinePreferences()
         return RoutinePreferences(
@@ -77,9 +77,9 @@ class PreferencesSettingsStore(context: Context) : SettingsStore {
     override fun save(preferences: RoutinePreferences) {
         file.edit {
             putInt(SettingsKeys.CYCLES, preferences.settings.cycles)
-            putInt(SettingsKeys.HOLD, preferences.settings.hold)
-            putInt(SettingsKeys.SWITCH, preferences.settings.switch)
-            putInt(SettingsKeys.REST, preferences.settings.rest)
+            putInt(SettingsKeys.HOLD, preferences.settings.holdSeconds)
+            putInt(SettingsKeys.SWITCH, preferences.settings.switchSeconds)
+            putInt(SettingsKeys.REST, preferences.settings.restSeconds)
             putBoolean(SettingsKeys.CUES, preferences.cuesEnabled)
             putInt(SettingsKeys.WEIGHT_LB_HUNDREDTHS, weightLbHundredths(preferences.weightLb))
         }

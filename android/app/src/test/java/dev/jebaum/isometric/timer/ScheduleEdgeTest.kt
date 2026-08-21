@@ -16,24 +16,24 @@ import org.junit.Test
 class ScheduleEdgeTest {
 
     /** Every field at its maximum: the longest routine the dialog accepts. */
-    private val biggest = Settings(cycles = 99, hold = 3600, switch = 3600, rest = 3600)
+    private val biggest = Settings(cycles = 99, holdSeconds = 3600, switchSeconds = 3600, restSeconds = 3600)
 
     @Test
     fun `totalSeconds matches the routine the timer will run`() {
         val expected = listOf(
             DEFAULT_SETTINGS to 570,
             // Shortest routine there is: one hold per side, nothing between.
-            Settings(cycles = 1, hold = 1, switch = 0, rest = 0) to 2,
+            Settings(cycles = 1, holdSeconds = 1, switchSeconds = 0, restSeconds = 0) to 2,
             // A single cycle has no gap to rest in, so rest cannot lengthen it.
-            Settings(cycles = 1, hold = 1, switch = 0, rest = 3600) to 2,
-            Settings(cycles = 99, hold = 1, switch = 0, rest = 0) to 198,
-            Settings(cycles = 1, hold = 3600, switch = 3600, rest = 3600) to 10_800,
+            Settings(cycles = 1, holdSeconds = 1, switchSeconds = 0, restSeconds = 3600) to 2,
+            Settings(cycles = 99, holdSeconds = 1, switchSeconds = 0, restSeconds = 0) to 198,
+            Settings(cycles = 1, holdSeconds = 3600, switchSeconds = 3600, restSeconds = 3600) to 10_800,
             biggest to 1_422_000,
             // Mid-range rows: every phase kind present, then exactly one omitted,
             // so a dropped SWITCH or REST phase cannot slip past the extremes above.
-            Settings(cycles = 2, hold = 1, switch = 1, rest = 1) to 7,
-            Settings(cycles = 3, hold = 9, switch = 0, rest = 4) to 62,
-            Settings(cycles = 3, hold = 9, switch = 4, rest = 0) to 66,
+            Settings(cycles = 2, holdSeconds = 1, switchSeconds = 1, restSeconds = 1) to 7,
+            Settings(cycles = 3, holdSeconds = 9, switchSeconds = 0, restSeconds = 4) to 62,
+            Settings(cycles = 3, holdSeconds = 9, switchSeconds = 4, restSeconds = 0) to 66,
         )
         for ((settings, seconds) in expected) {
             assertTrue("$settings should be valid", settings.isValid())
@@ -54,19 +54,19 @@ class ScheduleEdgeTest {
         // The settings preview rebuilds and sums this on every recomposition,
         // which is only reasonable while the schedule stays this small.
         assertEquals(395, phases.size)
-        // Int seconds must not wrap, and clock() must render rather than go negative.
+        // Int seconds must not wrap, and formatDuration() must render rather than go negative.
         assertTrue(biggest.totalSeconds() > 0)
-        assertEquals("23700:00", clock(biggest.totalSeconds()))
+        assertEquals("23700:00", formatDuration(biggest.totalSeconds()))
     }
 
     @Test
     fun `isValid is strictly narrower than what buildSchedule will build`() {
         // Anything isValid() accepts, buildSchedule must accept.
         for (cycles in listOf(1, 50, 99)) {
-            for (hold in listOf(1, 1800, 3600)) {
-                for (switch in listOf(0, 3600)) {
-                    for (rest in listOf(0, 3600)) {
-                        val settings = Settings(cycles, hold, switch, rest)
+            for (holdSeconds in listOf(1, 1800, 3600)) {
+                for (switchSeconds in listOf(0, 3600)) {
+                    for (restSeconds in listOf(0, 3600)) {
+                        val settings = Settings(cycles, holdSeconds, switchSeconds, restSeconds)
                         assertTrue(settings.isValid())
                         buildSchedule(settings) // must not throw
                     }
@@ -76,21 +76,21 @@ class ScheduleEdgeTest {
         // And the bounds themselves.
         assertFalse(Settings(cycles = 0).isValid())
         assertFalse(Settings(cycles = 100).isValid())
-        assertFalse(Settings(hold = 0).isValid())
-        assertFalse(Settings(hold = 3601).isValid())
-        assertFalse(Settings(switch = -1).isValid())
-        assertFalse(Settings(switch = 3601).isValid())
-        assertFalse(Settings(rest = -1).isValid())
-        assertFalse(Settings(rest = 3601).isValid())
+        assertFalse(Settings(holdSeconds = 0).isValid())
+        assertFalse(Settings(holdSeconds = 3601).isValid())
+        assertFalse(Settings(switchSeconds = -1).isValid())
+        assertFalse(Settings(switchSeconds = 3601).isValid())
+        assertFalse(Settings(restSeconds = -1).isValid())
+        assertFalse(Settings(restSeconds = 3601).isValid())
     }
 
     @Test
     fun `cumulative still produces one more mark than there are phases`() {
         for (settings in listOf(
-            Settings(cycles = 1, hold = 1, switch = 0, rest = 0),
+            Settings(cycles = 1, holdSeconds = 1, switchSeconds = 0, restSeconds = 0),
             DEFAULT_SETTINGS,
-            Settings(cycles = 3, hold = 9, switch = 0, rest = 4),
-            Settings(cycles = 3, hold = 9, switch = 4, rest = 0),
+            Settings(cycles = 3, holdSeconds = 9, switchSeconds = 0, restSeconds = 4),
+            Settings(cycles = 3, holdSeconds = 9, switchSeconds = 4, restSeconds = 0),
         )) {
             val phases = buildSchedule(settings)
             val marks = cumulative(phases)

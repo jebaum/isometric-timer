@@ -66,12 +66,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import dev.jebaum.isometric.RoutineViewModel
-import dev.jebaum.isometric.timer.Kind
 import dev.jebaum.isometric.timer.Phase
+import dev.jebaum.isometric.timer.PhaseId
+import dev.jebaum.isometric.timer.PhaseKind
 import dev.jebaum.isometric.timer.RoutineStatus
 import dev.jebaum.isometric.timer.Settings
 import dev.jebaum.isometric.timer.Snapshot
-import dev.jebaum.isometric.timer.clock
+import dev.jebaum.isometric.timer.formatDuration
 import dev.jebaum.isometric.timer.underway
 import java.time.Instant
 import java.time.ZoneId
@@ -250,7 +251,7 @@ private fun TimerContent(
     onHistory: () -> Unit,
     onSettings: () -> Unit,
 ) {
-    val resting = snapshot.phase.kind == Kind.REST
+    val resting = snapshot.phase.kind == PhaseKind.REST
     val accent = if (resting) Palette.Rest else Palette.Accent
     val accentStrong = if (resting) Palette.RestStrong else Palette.AccentStrong
 
@@ -380,7 +381,11 @@ private fun TimerBody(
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = if (snapshot.status == RoutineStatus.COMPLETE) "DONE" else snapshot.phase.label,
+            text = if (snapshot.status == RoutineStatus.COMPLETE) {
+                NOTHING_LEFT
+            } else {
+                snapshot.phase.id.label
+            },
             color = Palette.Text,
             fontSize = 32.sp,
             fontWeight = FontWeight.Bold,
@@ -407,7 +412,7 @@ private fun TimerBody(
         // the composition as a whole stays balanced.
         Spacer(Modifier.height(44.dp))
         MetaRow(
-            total = clock(snapshot.totalLeft),
+            total = formatDuration(snapshot.totalLeft),
             cycle = "${snapshot.cycle} / ${snapshot.cycles}",
             weight = weight,
             weightEnabled = weightEnabled,
@@ -415,7 +420,7 @@ private fun TimerBody(
             accent = accent,
         )
         Spacer(Modifier.height(22.dp))
-        NextPhase(next = snapshot.next, accent = accent)
+        NextPhase(next = snapshot.next?.id?.label ?: NOTHING_LEFT, accent = accent)
         Spacer(Modifier.height(20.dp))
 
         Row(Modifier.fillMaxWidth()) {
@@ -646,6 +651,22 @@ private fun stateLabel(status: RoutineStatus) = when (status) {
     RoutineStatus.COMPLETE -> "COMPLETE"
 }
 
+/**
+ * What the screen calls each phase. The timer core knows only which phase it
+ * is standing on; the words for it are presentation, and live only here.
+ * Internal so a JVM test can pin the exact strings the user sees.
+ */
+internal val PhaseId.label: String
+    get() = when (this) {
+        PhaseId.RIGHT_HOLD -> "RIGHT SIDE"
+        PhaseId.SWITCH -> "SWITCH"
+        PhaseId.LEFT_HOLD -> "LEFT SIDE"
+        PhaseId.REST -> "REST"
+    }
+
+/** Shown where a phase name would be once there is no phase left to name. */
+internal const val NOTHING_LEFT = "DONE"
+
 /** What the primary button does next, which is one thing per status. */
 private fun startLabel(status: RoutineStatus) = when (status) {
     RoutineStatus.READY -> "Start"
@@ -696,17 +717,18 @@ private fun formatRecommendedAt(
 // ---- previews ---------------------------------------------------------------
 
 private fun previewSnapshot(
-    label: String = "RIGHT SIDE",
-    kind: Kind = Kind.HOLD,
+    id: PhaseId = PhaseId.RIGHT_HOLD,
     secondsLeft: Int = 35,
-    next: String = "SWITCH",
+    next: PhaseId? = PhaseId.SWITCH,
     totalLeft: Int = 570,
     cycle: Int = 1,
     status: RoutineStatus = RoutineStatus.RUNNING,
 ) = Snapshot(
-    phase = Phase(label, 35, kind, cycle),
+    phase = Phase(id, 35, cycle),
     index = 0,
-    next = next,
+    // The schedule starts the next cycle right after each REST, so a preview
+    // whose next phase follows a REST must number it into the next cycle.
+    next = next?.let { Phase(it, 35, if (id == PhaseId.REST) cycle + 1 else cycle) },
     secondsLeft = secondsLeft,
     totalLeft = totalLeft,
     cycle = cycle,
@@ -757,7 +779,7 @@ private fun WarningPreview() =
 @Composable
 private fun RestPreview() =
     PreviewFrame(
-        previewSnapshot(label = "REST", kind = Kind.REST, secondsLeft = 62, next = "RIGHT SIDE"),
+        previewSnapshot(id = PhaseId.REST, secondsLeft = 62, next = PhaseId.RIGHT_HOLD),
         0.31f,
     )
 
@@ -767,7 +789,7 @@ private fun CompletePreview() =
     PreviewFrame(
         previewSnapshot(
             secondsLeft = 0,
-            next = "DONE",
+            next = null,
             totalLeft = 0,
             cycle = 4,
             status = RoutineStatus.COMPLETE,

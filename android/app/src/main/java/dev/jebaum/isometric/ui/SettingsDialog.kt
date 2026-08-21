@@ -39,7 +39,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.jebaum.isometric.timer.DEFAULT_SETTINGS
 import dev.jebaum.isometric.timer.Settings
-import dev.jebaum.isometric.timer.clock
+import dev.jebaum.isometric.timer.formatDuration
 import dev.jebaum.isometric.timer.isValid
 import dev.jebaum.isometric.timer.totalSeconds
 
@@ -58,12 +58,20 @@ fun SettingsDialog(
     // rememberSaveable: a rotation while the dialog is open must not silently
     // discard what has been typed.
     var cycles by rememberSaveable(initial) { mutableStateOf(initial.cycles.toString()) }
-    var hold by rememberSaveable(initial) { mutableStateOf(initial.hold.toString()) }
-    var switch by rememberSaveable(initial) { mutableStateOf(initial.switch.toString()) }
-    var rest by rememberSaveable(initial) { mutableStateOf(initial.rest.toString()) }
+    var holdSeconds by rememberSaveable(initial) {
+        mutableStateOf(initial.holdSeconds.toString())
+    }
+    var switchSeconds by rememberSaveable(initial) {
+        mutableStateOf(initial.switchSeconds.toString())
+    }
+    var restSeconds by rememberSaveable(initial) {
+        mutableStateOf(initial.restSeconds.toString())
+    }
     var cuesEnabled by rememberSaveable(initialCuesEnabled) { mutableStateOf(initialCuesEnabled) }
 
-    val candidate = remember(cycles, hold, switch, rest) { parse(cycles, hold, switch, rest) }
+    val candidate = remember(cycles, holdSeconds, switchSeconds, restSeconds) {
+        parse(cycles, holdSeconds, switchSeconds, restSeconds)
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -106,12 +114,12 @@ fun SettingsDialog(
 
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     NumberField("Cycles", cycles, { cycles = it }, Modifier.weight(1f))
-                    NumberField("Hold (s)", hold, { hold = it }, Modifier.weight(1f))
+                    NumberField("Hold (s)", holdSeconds, { holdSeconds = it }, Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    NumberField("Switch (s)", switch, { switch = it }, Modifier.weight(1f))
-                    NumberField("Rest (s)", rest, { rest = it }, Modifier.weight(1f), last = true)
+                    NumberField("Switch (s)", switchSeconds, { switchSeconds = it }, Modifier.weight(1f))
+                    NumberField("Rest (s)", restSeconds, { restSeconds = it }, Modifier.weight(1f), last = true)
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -155,9 +163,9 @@ fun SettingsDialog(
                     Button(
                         onClick = {
                             cycles = DEFAULT_SETTINGS.cycles.toString()
-                            hold = DEFAULT_SETTINGS.hold.toString()
-                            switch = DEFAULT_SETTINGS.switch.toString()
-                            rest = DEFAULT_SETTINGS.rest.toString()
+                            holdSeconds = DEFAULT_SETTINGS.holdSeconds.toString()
+                            switchSeconds = DEFAULT_SETTINGS.switchSeconds.toString()
+                            restSeconds = DEFAULT_SETTINGS.restSeconds.toString()
                         },
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -201,12 +209,17 @@ private fun NumberField(
 )
 
 /** Returns null when the entries do not form a routine the timer will accept. */
-private fun parse(cycles: String, hold: String, switch: String, rest: String): Settings? {
+private fun parse(
+    cycles: String,
+    holdSeconds: String,
+    switchSeconds: String,
+    restSeconds: String,
+): Settings? {
     val candidate = Settings(
         cycles = cycles.toIntOrNull() ?: return null,
-        hold = hold.toIntOrNull() ?: return null,
-        switch = switch.toIntOrNull() ?: return null,
-        rest = rest.toIntOrNull() ?: return null,
+        holdSeconds = holdSeconds.toIntOrNull() ?: return null,
+        switchSeconds = switchSeconds.toIntOrNull() ?: return null,
+        restSeconds = restSeconds.toIntOrNull() ?: return null,
     )
     return candidate.takeIf { it.isValid() }
 }
@@ -214,5 +227,5 @@ private fun parse(cycles: String, hold: String, switch: String, rest: String): S
 private fun preview(candidate: Settings?): String {
     if (candidate == null) return "Enter valid whole-second durations"
     val noun = if (candidate.cycles == 1) "cycle" else "cycles"
-    return "${candidate.cycles} $noun · ${clock(candidate.totalSeconds())} total"
+    return "${candidate.cycles} $noun · ${formatDuration(candidate.totalSeconds())} total"
 }

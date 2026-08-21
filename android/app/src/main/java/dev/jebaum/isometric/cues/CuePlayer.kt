@@ -1,6 +1,6 @@
 package dev.jebaum.isometric.cues
 
-import dev.jebaum.isometric.timer.Kind
+import dev.jebaum.isometric.timer.PhaseKind
 
 /**
  * During a hold you are usually not looking at the screen, so every phase
@@ -8,7 +8,7 @@ import dev.jebaum.isometric.timer.Kind
  */
 sealed interface Cue {
     /** A new phase began. */
-    data class Enter(val kind: Kind) : Cue
+    data class Enter(val kind: PhaseKind) : Cue
 
     /** One of the final seconds of a hold ticked by. */
     data object Warn : Cue
