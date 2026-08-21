@@ -13,11 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,8 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import dev.jebaum.isometric.WeightedCompletion
 import java.time.DayOfWeek
 import java.time.Instant
@@ -86,81 +82,55 @@ fun HistoryDialog(
     }
     val weeks = remember(month, firstDayOfWeek) { monthWeeks(month, firstDayOfWeek) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+    AppDialog(
+        onDismiss = onDismiss,
+        // The weight section can push the calendar past a short window, e.g.
+        // landscape or a large system font.
+        modifier = Modifier.verticalScroll(rememberScrollState()),
     ) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = Palette.SurfaceRaised,
-            contentColor = Palette.Text,
-            modifier = Modifier
-                .padding(16.dp)
-                .widthIn(max = 512.dp),
+        DialogHeader(
+            eyebrow = "HISTORY",
+            title = "Routine calendar",
+            closeDescription = "Close history",
+            onClose = onDismiss,
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        MonthHeader(
+            month = month,
+            locale = locale,
+            onPrevious = {
+                val previous = month.minusMonths(1)
+                year = previous.year
+                monthNumber = previous.monthValue
+            },
+            onNext = {
+                val next = month.plusMonths(1)
+                year = next.year
+                monthNumber = next.monthValue
+            },
+        )
+
+        WeekdayHeader(firstDayOfWeek = firstDayOfWeek, locale = locale)
+        MonthGrid(weeks = weeks, today = today, counts = counts)
+
+        Spacer(Modifier.height(12.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(
-                Modifier
-                    // The weight section can push the calendar past a short
-                    // window, e.g. landscape or a large system font.
-                    .verticalScroll(rememberScrollState())
-                    .padding(22.dp),
-            ) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column {
-                        Text("HISTORY", color = Palette.Accent, style = MetaLabelStyle)
-                        Spacer(Modifier.height(4.dp))
-                        Text("Routine calendar", fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                    }
-                    TextButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.semantics { contentDescription = "Close history" },
-                    ) {
-                        CloseIcon(tint = Palette.Muted, modifier = Modifier.size(22.dp))
-                    }
-                }
+            HistoryMark(1)
+            Text(" one routine", color = Palette.Muted, fontSize = 12.sp)
+            Spacer(Modifier.size(18.dp))
+            HistoryMark(2)
+            Text(" two or more", color = Palette.Muted, fontSize = 12.sp)
+        }
 
-                Spacer(Modifier.height(12.dp))
-
-                MonthHeader(
-                    month = month,
-                    locale = locale,
-                    onPrevious = {
-                        val previous = month.minusMonths(1)
-                        year = previous.year
-                        monthNumber = previous.monthValue
-                    },
-                    onNext = {
-                        val next = month.plusMonths(1)
-                        year = next.year
-                        monthNumber = next.monthValue
-                    },
-                )
-
-                WeekdayHeader(firstDayOfWeek = firstDayOfWeek, locale = locale)
-                MonthGrid(weeks = weeks, today = today, counts = counts)
-
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    HistoryMark(1)
-                    Text(" one routine", color = Palette.Muted, fontSize = 12.sp)
-                    Spacer(Modifier.size(18.dp))
-                    HistoryMark(2)
-                    Text(" two or more", color = Palette.Muted, fontSize = 12.sp)
-                }
-
-                if (weightChart != null) {
-                    Spacer(Modifier.height(20.dp))
-                    WeightSection(chart = weightChart, locale = locale)
-                }
-            }
+        if (weightChart != null) {
+            Spacer(Modifier.height(20.dp))
+            WeightSection(chart = weightChart, locale = locale)
         }
     }
 }
