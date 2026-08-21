@@ -47,6 +47,7 @@ import androidx.compose.ui.window.DialogProperties
 import dev.jebaum.isometric.WeightedCompletion
 import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -83,6 +84,7 @@ fun HistoryDialog(
     val weightChart = remember(historyVersion, zone) {
         weightChart(weightHistory(), zone)
     }
+    val weeks = remember(month, firstDayOfWeek) { monthWeeks(month, firstDayOfWeek) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -139,12 +141,7 @@ fun HistoryDialog(
                 )
 
                 WeekdayHeader(firstDayOfWeek = firstDayOfWeek, locale = locale)
-                MonthGrid(
-                    month = month,
-                    today = today,
-                    firstDayOfWeek = firstDayOfWeek,
-                    counts = counts,
-                )
+                MonthGrid(weeks = weeks, today = today, counts = counts)
 
                 Spacer(Modifier.height(12.dp))
                 Row(
@@ -219,23 +216,16 @@ private fun WeekdayHeader(firstDayOfWeek: DayOfWeek, locale: Locale) {
     }
 }
 
+/** Renders the layout [monthWeeks] already decided; no date arithmetic here. */
 @Composable
 private fun MonthGrid(
-    month: YearMonth,
-    today: java.time.LocalDate,
-    firstDayOfWeek: DayOfWeek,
-    counts: Map<java.time.LocalDate, Int>,
+    weeks: List<List<LocalDate?>>,
+    today: LocalDate,
+    counts: Map<LocalDate, Int>,
 ) {
-    val first = month.atDay(1)
-    val leading = (first.dayOfWeek.value - firstDayOfWeek.value + 7) % 7
-    val populatedCells = leading + month.lengthOfMonth()
-    val cellCount = ((populatedCells + 6) / 7) * 7
-
-    repeat(cellCount / 7) { week ->
+    weeks.forEach { week ->
         Row(Modifier.fillMaxWidth()) {
-            repeat(7) { weekday ->
-                val cell = week * 7 + weekday
-                val dayNumber = cell - leading + 1
+            week.forEach { date ->
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -243,10 +233,9 @@ private fun MonthGrid(
                         .padding(2.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (dayNumber in 1..month.lengthOfMonth()) {
-                        val date = month.atDay(dayNumber)
+                    if (date != null) {
                         DayCell(
-                            dayNumber = dayNumber,
+                            dayNumber = date.dayOfMonth,
                             count = counts[date] ?: 0,
                             isToday = date == today,
                         )

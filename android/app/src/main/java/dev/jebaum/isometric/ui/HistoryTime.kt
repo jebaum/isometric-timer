@@ -1,5 +1,6 @@
 package dev.jebaum.isometric.ui
 
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -29,3 +30,21 @@ internal fun completionCountsByDate(
     .map { localDateOf(it, zone) }
     .groupingBy { it }
     .eachCount()
+
+/**
+ * The month laid out as whole weeks of seven cells. A `null` cell pads the
+ * leading and trailing edges, so the row count follows where the month starts
+ * under [firstDayOfWeek] — which the caller reads from the display locale
+ * rather than this function reaching for a device global.
+ */
+internal fun monthWeeks(month: YearMonth, firstDayOfWeek: DayOfWeek): List<List<LocalDate?>> {
+    val leading = (month.atDay(1).dayOfWeek.value - firstDayOfWeek.value + 7) % 7
+    val length = month.lengthOfMonth()
+    val weekCount = (leading + length + 6) / 7
+    return List(weekCount) { week ->
+        List(7) { weekday ->
+            val dayOfMonth = week * 7 + weekday - leading + 1
+            if (dayOfMonth in 1..length) month.atDay(dayOfMonth) else null
+        }
+    }
+}
