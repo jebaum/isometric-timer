@@ -48,8 +48,6 @@ class RoutineTest {
 
     @Test
     fun `invalid schedule values are rejected`() {
-        // The web suite's fractional-cycles case is absent by construction: Int
-        // cannot hold 2.5.
         val invalid = listOf(
             Settings(cycles = 0, hold = 35, switch = 5, rest = 90),
             Settings(cycles = 4, hold = 0, switch = 5, rest = 90),

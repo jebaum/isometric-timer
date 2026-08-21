@@ -24,9 +24,9 @@ data class Snapshot(
     val done: Boolean,
 ) {
     /**
-     * The closing seconds of a hold. Derived once here because the web version
-     * computed it once too, and its two consumers — the amber countdown and the
-     * warning cue — must not drift apart.
+     * The closing seconds of a hold. Derived once here because its two
+     * consumers — the amber countdown and the warning cue — must not drift
+     * apart.
      */
     val warning: Boolean
         get() = !done && phase.kind == Kind.HOLD && secondsLeft in 1..WARNING_SECONDS

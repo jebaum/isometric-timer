@@ -131,7 +131,7 @@ class RoutineEdgeTest {
     }
 
     @Test
-    fun `clock matches the javascript formatting for the interesting values`() {
+    fun `clock formats minutes and seconds, clamping below zero`() {
         assertEquals("0:00", clock(0))
         assertEquals("0:00", clock(-1))
         assertEquals("0:09", clock(9))

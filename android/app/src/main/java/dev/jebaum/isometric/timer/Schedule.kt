@@ -17,7 +17,7 @@ val DEFAULT_SETTINGS = Settings()
 /** Seconds of a hold that count as the closing warning. */
 const val WARNING_SECONDS = 3
 
-/** Bounds mirror the `min`/`max` attributes on the web form's number inputs. */
+/** What the settings form will accept. */
 val CYCLE_RANGE = 1..99
 val SECONDS_RANGE = 0..3600
 
@@ -52,8 +52,6 @@ fun Settings.totalSeconds(): Int =
     cycles * (2 * hold + switch) + (cycles - 1) * rest
 
 private fun requireAtLeast(name: String, value: Int, minimum: Int) {
-    // The web version also had to reject non-integers; Int makes that
-    // unrepresentable, so only the bound survives the port.
     require(value >= minimum) {
         val qualifier = if (minimum == 0) "zero or greater" else "greater than zero"
         "$name must be a whole number $qualifier"

@@ -25,10 +25,3 @@ adb install -r app/build/outputs/apk/release/app-release.apk
   holds, a 5-second switch, and 90-second rests.
 - Finishing a routine logs a completion; the calendar button shows the history
   and the recommended eight-hour gap before the next one.
-
-## History
-
-This started as a PWA at the repository root, and the Android app was written to
-match its behaviour. The Android app has since gained functionality the web one
-never had and is now the only implementation; the PWA and the JavaScript parity
-fixture that guarded the port were removed in August 2026.

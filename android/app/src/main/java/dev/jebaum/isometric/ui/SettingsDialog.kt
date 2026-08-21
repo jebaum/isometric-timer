@@ -67,8 +67,8 @@ fun SettingsDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        // The stylesheet sized this min(100% - 2rem, 32rem); the platform
-        // default width would clamp it narrower.
+        // The platform default width would clamp the dialog narrower than the
+        // four labelled number fields want.
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(

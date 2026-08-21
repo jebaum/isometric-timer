@@ -21,7 +21,7 @@ object Palette {
     val AccentStrong = Color(0xFF9D79ED)
     val Warning = Color(0xFFF2BD4B)
 
-    /** `body[data-kind="rest"]` swaps the accent out for these. */
+    /** A rest phase swaps the accent out for these, draining the screen of colour. */
     val Rest = Color(0xFF9A94A0)
     val RestStrong = Color(0xFF77717D)
 
@@ -30,23 +30,23 @@ object Palette {
 
     /**
      * Gradient stops for the whole backdrop. Both are translucent and composite
-     * over [Background], which is what keeps the resulting colours identical to
-     * the `.timer-card` gradient these were lifted from.
+     * over [Background] rather than standing alone, so the two must be changed
+     * together to keep the resulting colours where they are.
      */
     val BackdropTop = Color(0xF5231E2D)
     val BackdropBottom = Color(0xFA18151F)
 
-    /** `.secondary-button` and `.dialog-actions` fill. */
+    /** Fill for secondary buttons and dialog action rows. */
     val SurfaceSubtle = Color(0x0BFFFFFF)
 
-    /** `.progress-track` unfilled remainder. */
+    /** The progress track's unfilled remainder. */
     val TrackFill = Color(0x14F5F0FF)
 
-    /** `.next-phase` fill. */
+    /** Fill behind the next-phase cell. */
     val NextBackground = Color(0x06FFFFFF)
 }
 
-/** `.meta-label` — the small caps above TOTAL, CYCLE and NEXT. */
+/** The small caps that label a cell or head a dialog section. */
 val MetaLabelStyle = TextStyle(
     fontSize = 11.sp,
     fontWeight = FontWeight.ExtraBold,
@@ -54,12 +54,12 @@ val MetaLabelStyle = TextStyle(
 )
 
 /**
- * `.run-status`. The stylesheet shared one rule with `.meta-label`; here it is
- * a size larger, because it heads the three lines the eye actually lands on.
+ * The routine status line. A size larger than [MetaLabelStyle], because it
+ * heads the three lines the eye actually lands on.
  */
 val StatusLabelStyle = MetaLabelStyle.copy(fontSize = 13.sp)
 
-/** `font-variant-numeric: tabular-nums`, so counting digits do not jitter. */
+/** Tabular figures, so counting digits do not jitter. */
 val TabularStyle = TextStyle(fontFeatureSettings = "tnum")
 
 private val ColorScheme = darkColorScheme(

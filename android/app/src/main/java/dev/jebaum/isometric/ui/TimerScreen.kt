@@ -372,8 +372,8 @@ private fun TimerBody(
             text = stateLabel(snapshot),
             color = accent,
             style = StatusLabelStyle,
-            // Mirrors aria-live="polite" on the web status line. Deliberately
-            // not on the countdown, which changes every second.
+            // A phase change is worth announcing. Deliberately not on the
+            // countdown, which changes every second.
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         )
         Spacer(Modifier.height(8.dp))
@@ -474,9 +474,9 @@ private fun Countdown(seconds: Int, color: Color, dimmed: Boolean, availableHeig
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        // Was 35vw, matching the stylesheet; widened once the card chrome went
-        // away and the countdown became the screen's focal point. Still bounded
-        // by the short-viewport rule so a big system font cannot overflow.
+        // The countdown is the screen's focal point, so it takes a wide share
+        // of the width. Still bounded by the short-viewport rule so a big
+        // system font cannot overflow.
         val short = availableHeight < 680.dp
         val size = minOf(maxWidth * 0.42f, availableHeight * 0.25f)
             .coerceIn(if (short) 88.dp else 112.dp, if (short) 144.dp else 224.dp)
@@ -511,7 +511,7 @@ private fun ProgressTrack(progress: () -> Float, accent: Color, accentStrong: Co
         Modifier
             .fillMaxWidth()
             .height(9.dp)
-            // Mirrors aria-hidden="true"; the countdown already announces this.
+            // Purely decorative; the countdown already announces this.
             .clearAndSetSemantics { },
     ) {
         val radius = CornerRadius(size.height / 2f)
