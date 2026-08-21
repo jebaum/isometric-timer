@@ -172,6 +172,7 @@ fun TimerScreen(viewModel: RoutineViewModel) {
             zone = zone,
             locale = locale,
             completionsBetween = viewModel::completionsBetween,
+            weightHistory = viewModel::weightHistory,
             onDismiss = { historyOpen = false },
         )
     }
