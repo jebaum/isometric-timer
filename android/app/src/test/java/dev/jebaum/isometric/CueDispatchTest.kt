@@ -9,16 +9,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private class RecordingCuePlayer(private val onPlay: (Cue) -> Unit = {}) : CuePlayer {
-    val played = mutableListOf<Cue>()
-    override fun play(cue: Cue) {
-        played += cue
-        onPlay(cue)
-    }
-
-    override fun release() = Unit
-}
-
 /**
  * Exercises [RoutineViewModel]'s cue dispatch — the one piece of stateful logic
  * that a device would otherwise be needed to check. Every dependency, including
@@ -27,7 +17,7 @@ private class RecordingCuePlayer(private val onPlay: (Cue) -> Unit = {}) : CuePl
  */
 class CueDispatchTest {
 
-    private var time = 1_000.0
+    private val clock = FakeClock()
     private val player = RecordingCuePlayer()
     private val failures = RecordingFailureReporter()
 
@@ -38,21 +28,9 @@ class CueDispatchTest {
     ) = RoutineViewModel(
         store = FakeSettingsStore(settings, cuesEnabled),
         player = player,
-        now = { time },
+        now = clock.now,
         failures = failures,
     )
-
-    /** Advances the clock in 50 ms steps, ticking the way the frame loop does. */
-    private fun advanceBy(model: RoutineViewModel, seconds: Double) {
-        var left = seconds
-        while (left > 0) {
-            time += 0.05
-            left -= 0.05
-            if (model.running) model.tick()
-        }
-    }
-
-    private fun enters() = player.played.filterIsInstance<Cue.Enter>().map { it.kind }
 
     @Test
     fun `the first Start cues the opening hold`() {
@@ -91,13 +69,30 @@ class CueDispatchTest {
     fun `a full routine announces every boundary exactly once`() {
         val model = viewModel()
         model.toggle()
-        advanceBy(model, 30.0)
+        clock.advanceBy(model, 30.0)
 
         assertEquals(
             listOf(PhaseKind.HOLD, PhaseKind.SWITCH, PhaseKind.HOLD, PhaseKind.REST, PhaseKind.HOLD, PhaseKind.SWITCH, PhaseKind.HOLD),
-            enters(),
+            player.enters,
         )
-        assertEquals(1, player.played.count { it is Cue.Done })
+        assertEquals(1, player.doneCount)
+    }
+
+    /**
+     * Cues are keyed on index and secondsLeft edges, not on frame timing, so a
+     * display ticking at a coarser cadence must announce the same routine.
+     */
+    @Test
+    fun `a full routine announces the same boundaries at a coarse frame cadence`() {
+        val model = viewModel()
+        model.toggle()
+        clock.advanceBy(model, 30.0, step = 0.05)
+
+        assertEquals(
+            listOf(PhaseKind.HOLD, PhaseKind.SWITCH, PhaseKind.HOLD, PhaseKind.REST, PhaseKind.HOLD, PhaseKind.SWITCH, PhaseKind.HOLD),
+            player.enters,
+        )
+        assertEquals(1, player.doneCount)
     }
 
     /**
@@ -120,20 +115,20 @@ class CueDispatchTest {
     fun `the closing seconds of a hold warn once each`() {
         val model = viewModel(Settings(cycles = 1, holdSeconds = 10, switchSeconds = 0, restSeconds = 0))
         model.toggle()
-        advanceBy(model, 9.5)
+        clock.advanceBy(model, 9.5)
 
-        assertEquals(3, player.played.count { it is Cue.Warn })
+        assertEquals(3, player.warnCount)
     }
 
     @Test
     fun `switch and rest phases never warn`() {
         val model = viewModel(Settings(cycles = 2, holdSeconds = 4, switchSeconds = 3, restSeconds = 3))
         model.toggle()
-        advanceBy(model, 26.0) // the routine itself is 25s; run past the end
+        clock.advanceBy(model, 26.0) // the routine itself is 25s; run past the end
 
         // Four holds of 4s, each warning at 3, 2 and 1 second remaining, and
         // nothing at all from the two switches or the rest.
-        assertEquals(12, player.played.count { it is Cue.Warn })
+        assertEquals(12, player.warnCount)
         assertEquals(RoutineStatus.COMPLETE, model.snapshot.status)
     }
 
@@ -141,15 +136,15 @@ class CueDispatchTest {
     fun `pausing and resuming inside the warning window does not double-warn`() {
         val model = viewModel(Settings(cycles = 1, holdSeconds = 10, switchSeconds = 0, restSeconds = 0))
         model.toggle()
-        advanceBy(model, 8.0)
+        clock.advanceBy(model, 8.0)
 
-        val before = player.played.count { it is Cue.Warn }
+        val before = player.warnCount
         repeat(6) {
             model.toggle()
-            time += 5.0
+            clock.advanceBy(5.0)
             model.toggle()
         }
-        assertEquals(before, player.played.count { it is Cue.Warn })
+        assertEquals(before, player.warnCount)
     }
 
     @Test
@@ -158,7 +153,7 @@ class CueDispatchTest {
         model.toggle()
         player.played.clear()
 
-        time += 300.0 // away for five minutes
+        clock.advanceBy(300.0) // away for five minutes
         model.tick()
 
         assertEquals(1, player.played.size)
@@ -170,18 +165,18 @@ class CueDispatchTest {
         val model = viewModel(Settings(cycles = 4, holdSeconds = 35, switchSeconds = 5, restSeconds = 90))
         model.toggle()
         repeat(40) {
-            time += 0.001
+            clock.advanceBy(0.001)
             model.skip()
         }
-        assertEquals(15, player.played.count { it is Cue.Enter })
-        assertEquals(1, player.played.count { it is Cue.Done })
+        assertEquals(15, player.enters.size)
+        assertEquals(1, player.doneCount)
     }
 
     @Test
     fun `restarting after completion cues the opening hold again`() {
         val model = viewModel(Settings(cycles = 1, holdSeconds = 2, switchSeconds = 0, restSeconds = 0))
         model.toggle()
-        advanceBy(model, 6.0)
+        clock.advanceBy(model, 6.0)
         player.played.clear()
 
         model.toggle() // "Again" resets
@@ -193,7 +188,7 @@ class CueDispatchTest {
     fun `nothing is announced while cues are disabled`() {
         val model = viewModel(cuesEnabled = false)
         model.toggle()
-        advanceBy(model, 30.0)
+        clock.advanceBy(model, 30.0)
 
         assertTrue(player.played.isEmpty())
     }
@@ -202,7 +197,7 @@ class CueDispatchTest {
     fun `saving settings resets the routine so the next Start cues again`() {
         val model = viewModel()
         model.toggle()
-        advanceBy(model, 6.0)
+        clock.advanceBy(model, 6.0)
         player.played.clear()
 
         model.setSettings(Settings(cycles = 1, holdSeconds = 3, switchSeconds = 0, restSeconds = 0))
@@ -223,7 +218,7 @@ class CueDispatchTest {
         val model = viewModel(player = exploding)
 
         model.toggle()
-        advanceBy(model, 30.0)
+        clock.advanceBy(model, 30.0)
 
         assertEquals(
             "the routine still finished",
@@ -244,7 +239,7 @@ class CueDispatchTest {
         val model = viewModel(player = exploding)
 
         model.toggle()
-        advanceBy(model, 30.0)
+        clock.advanceBy(model, 30.0)
 
         assertEquals(
             "one report per attempted cue",
@@ -262,7 +257,7 @@ class CueDispatchTest {
     fun `a routine whose cues all succeed reports nothing`() {
         val model = viewModel()
         model.toggle()
-        advanceBy(model, 30.0)
+        clock.advanceBy(model, 30.0)
 
         assertEquals(emptyList<String>(), failures.operations)
     }
@@ -273,7 +268,7 @@ class CueDispatchTest {
         model.toggle()
         val before = model.snapshot
 
-        time += 0.5
+        clock.advanceBy(0.5)
         model.tick()
 
         // Half a second into a ten second hold: progress moved, but nothing the
