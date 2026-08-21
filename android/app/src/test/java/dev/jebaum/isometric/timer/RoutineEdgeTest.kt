@@ -153,14 +153,6 @@ class RoutineEdgeTest {
         assertEquals(0, bisectRight(marks, -0.001))
     }
 
-    @Test
-    fun `the largest schedule the settings dialog accepts does not overflow`() {
-        val phases = buildSchedule(Settings(cycles = 99, hold = 3600, switch = 3600, rest = 3600))
-        val total = phases.sumOf { it.seconds }
-        assertEquals(cumulative(phases).last(), total)
-        assertTrue(total > 0)
-    }
-
     /**
      * `skip()` is `offset -= marks[index + 1] - elapsed`, which only lands on the
      * mark if the double arithmetic round-trips. A short landing would show the

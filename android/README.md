@@ -30,7 +30,7 @@ app/src/test/java/dev/jebaum/isometric/
   RoutineViewModelTest.kt     Its edges: pause, completion, toggle histories, lifecycle
   timer/RoutineTest.kt        Schedule construction, validation, and clock formatting
   timer/RoutineEdgeTest.kt    Boundary arithmetic: exact marks, skip, drift, clamping
-  timer/SchedulePropertyTest.kt  totalSeconds() vs buildSchedule() over the valid domain
+  timer/ScheduleEdgeTest.kt   The edges of the settings dialog's accepted range
 ```
 
 `timer/` deliberately has no Android dependencies. Neither does

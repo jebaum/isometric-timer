@@ -47,9 +47,17 @@ fun Settings.isValid(): Boolean =
         switch in SECONDS_RANGE &&
         rest in SECONDS_RANGE
 
-/** Total runtime without building the schedule to add it up. */
+/**
+ * Total runtime, read off the last mark of the schedule the timer will actually
+ * run — the same number [Routine.total] runs on, so the settings preview cannot
+ * drift from it. The largest routine [isValid] accepts is under 400 phases, so
+ * building it to measure it costs nothing worth saving.
+ *
+ * Throws whatever [buildSchedule] throws for durations it cannot build, so call
+ * this on settings that already passed [isValid].
+ */
 fun Settings.totalSeconds(): Int =
-    cycles * (2 * hold + switch) + (cycles - 1) * rest
+    cumulative(buildSchedule(this)).last()
 
 private fun requireAtLeast(name: String, value: Int, minimum: Int) {
     require(value >= minimum) {
