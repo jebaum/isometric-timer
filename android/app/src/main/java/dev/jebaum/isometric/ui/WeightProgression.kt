@@ -26,12 +26,11 @@ internal data class WeightChart(
 }
 
 /**
- * One point per local day, carrying the day's last recorded weight. Returns
- * null until some completion has a weight above zero: an all-bodyweight
- * history would draw as a flat line at zero and say nothing.
+ * One point per local day, carrying the day's last recorded weight. Bodyweight
+ * (0) is a measurement like any other; only an empty history has no chart.
  */
 internal fun weightChart(history: List<WeightedCompletion>, zone: ZoneId): WeightChart? {
-    if (history.none { it.weightLb > 0.0 }) return null
+    if (history.isEmpty()) return null
 
     // associate keeps the last value per key, so ascending order makes each
     // day's final completion win.

@@ -16,17 +16,25 @@ class WeightProgressionTest {
         ZonedDateTime.of(year, month, day, hour, 0, 0, 0, zone).toInstant().toEpochMilli()
 
     @Test
-    fun `no chart until some completion carries a weight above zero`() {
+    fun `only an empty history has no chart`() {
         assertNull(weightChart(emptyList(), denver))
-        assertNull(
-            weightChart(
-                listOf(
-                    WeightedCompletion(at(2026, 8, 1, 9), 0.0),
-                    WeightedCompletion(at(2026, 8, 2, 9), 0.0),
-                ),
-                denver,
+    }
+
+    @Test
+    fun `an all-bodyweight history charts like any other flat history`() {
+        val chart = weightChart(
+            listOf(
+                WeightedCompletion(at(2026, 8, 1, 9), 0.0),
+                WeightedCompletion(at(2026, 8, 2, 9), 0.0),
             ),
-        )
+            denver,
+        )!!
+
+        assertEquals(2, chart.points.size)
+        assertEquals(0.0, chart.minWeightLb, 0.0)
+        assertEquals(0.0, chart.maxWeightLb, 0.0)
+        assertEquals(0.0, chart.latestWeightLb, 0.0)
+        assertEquals(listOf(0.5f, 0.5f), chart.points.map { it.yFraction })
     }
 
     @Test
@@ -91,7 +99,7 @@ class WeightProgressionTest {
     }
 
     @Test
-    fun `bodyweight days chart at zero once any weighted day exists`() {
+    fun `bodyweight days chart at zero alongside weighted days`() {
         val chart = weightChart(
             listOf(
                 WeightedCompletion(at(2026, 8, 1, 9), 0.0),
