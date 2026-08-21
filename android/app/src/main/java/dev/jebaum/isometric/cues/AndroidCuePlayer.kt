@@ -11,6 +11,8 @@ import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import dev.jebaum.isometric.FailureReporter
+import dev.jebaum.isometric.reportSafely
 import dev.jebaum.isometric.timer.PhaseKind
 
 /**
@@ -18,12 +20,20 @@ import dev.jebaum.isometric.timer.PhaseKind
  *
  * Every platform handle here is treated as optional: a missing vibrator or a
  * `ToneGenerator` that fails to allocate degrades this to silence rather than
- * taking down a timer whose actual job is counting.
+ * taking down a timer whose actual job is counting. What gets reported through
+ * [failures] is the broken rather than the absent — a `ToneGenerator` that
+ * fails to allocate, or hardware that is present and then fails — because from
+ * the far side of the room silent cues and broken cues look exactly the same.
  */
-class AndroidCuePlayer(context: Context) : CuePlayer {
+class AndroidCuePlayer(
+    context: Context,
+    private val failures: FailureReporter,
+) : CuePlayer {
 
     private val audioManager = context.getSystemService(AudioManager::class.java)
 
+    // A phone with no vibrator is a phone, not a fault, so its absence is not
+    // reported. Only a vibrator that is present and then refuses to fire is.
     private val vibrator: Vibrator? =
         context.getSystemService(VibratorManager::class.java)
             ?.defaultVibrator
@@ -33,7 +43,7 @@ class AndroidCuePlayer(context: Context) : CuePlayer {
     // whatever is already playing, instead of hiding them behind alarm volume.
     private val tones = runCatching {
         ToneGenerator(AudioManager.STREAM_MUSIC, TONE_VOLUME)
-    }.getOrNull()
+    }.onFailure { failures.reportSafely("allocating the tone generator", it) }.getOrNull()
 
     // Alarm usage so a cue still reaches you under a silent ringer profile —
     // the whole point is that you feel it while not looking at the screen.
@@ -56,6 +66,7 @@ class AndroidCuePlayer(context: Context) : CuePlayer {
     private val handler = Handler(Looper.getMainLooper())
     private val abandonFocus = Runnable {
         runCatching { audioManager?.abandonAudioFocusRequest(focusRequest) }
+            .onFailure { failures.reportSafely("abandoning audio focus", it) }
     }
 
     private var released = false
@@ -90,10 +101,12 @@ class AndroidCuePlayer(context: Context) : CuePlayer {
 
     private fun tone(type: Int, durationMillis: Int) {
         val generator = tones ?: return
+        // Focus and tone share one block because they are one attempt: a focus
+        // request that throws leaves nothing worth beeping into.
         runCatching {
             audioManager?.requestAudioFocus(focusRequest)
             generator.startTone(type, durationMillis)
-        }
+        }.onFailure { failures.reportSafely("requesting audio focus or starting tone $type", it) }
         handler.removeCallbacks(abandonFocus)
         handler.postDelayed(abandonFocus, durationMillis + FOCUS_TAIL_MILLIS)
     }
@@ -101,6 +114,7 @@ class AndroidCuePlayer(context: Context) : CuePlayer {
     private fun vibrate(effect: VibrationEffect) {
         val device = vibrator ?: return
         runCatching { device.vibrate(effect, vibrationAttributes) }
+            .onFailure { failures.reportSafely("vibrating", it) }
     }
 
     override fun release() {
@@ -109,6 +123,7 @@ class AndroidCuePlayer(context: Context) : CuePlayer {
         handler.removeCallbacks(abandonFocus)
         abandonFocus.run()
         runCatching { tones?.release() }
+            .onFailure { failures.reportSafely("releasing the tone generator", it) }
     }
 
     private companion object {

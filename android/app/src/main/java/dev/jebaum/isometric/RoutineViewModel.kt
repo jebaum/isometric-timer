@@ -31,6 +31,7 @@ class RoutineViewModel(
     private val now: () -> Double,
     private val history: CompletionHistoryStore = EmptyCompletionHistoryStore,
     private val wallNow: () -> Long = System::currentTimeMillis,
+    private val failures: FailureReporter = SilentFailureReporter,
 ) : ViewModel() {
 
     /**
@@ -149,19 +150,26 @@ class RoutineViewModel(
 
     /**
      * A misbehaving vibrator HAL or a released tone generator must not take out
-     * the frame loop that is driving the countdown.
+     * the frame loop that is driving the countdown. It does leave a log: a cue
+     * that never sounds is otherwise indistinguishable from a phone on mute.
      */
     private fun emit(cue: Cue) {
         runCatching { player.play(cue) }
+            .onFailure { failures.reportSafely("playing cue $cue", it) }
     }
 
     /** A storage failure must not stop the frame loop at the finish line. */
     private fun rememberCompletion() {
         val completedAt = wallNow()
-        runCatching { history.record(completedAt, weightLb) }.onSuccess {
-            lastCompletionAt = completedAt
-            historyVersion++
-        }
+        // The in-memory view of history moves only on success, so a failed write
+        // leaves nothing half-recorded to reconcile — and is reported once, on
+        // the transition, rather than on every frame that follows it.
+        runCatching { history.record(completedAt, weightLb) }
+            .onSuccess {
+                lastCompletionAt = completedAt
+                historyVersion++
+            }
+            .onFailure { failures.reportSafely("recording a completion in history", it) }
     }
 
     /** Called once per frame while the routine is running. */
@@ -200,7 +208,11 @@ class RoutineViewModel(
         // out the routine. The SharedPreferences implementation writes through
         // `apply()`, which reports no failures anyway.
         preferences = next
+        // The value itself never reaches the log — the operation and the
+        // exception are what a failed write needs explaining, and settings are
+        // the user's, not a diagnostic.
         runCatching { store.save(next) }
+            .onFailure { failures.reportSafely("saving preferences", it) }
     }
 
     /**

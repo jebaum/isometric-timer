@@ -24,6 +24,15 @@ internal class FakeSettingsStore(
     }
 }
 
+/** A store whose disk is gone: loads fine, refuses every write. */
+internal class FailingSettingsStore(
+    private val loaded: RoutinePreferences,
+) : SettingsStore {
+    override fun load(): RoutinePreferences = loaded
+
+    override fun save(preferences: RoutinePreferences): Unit = error("preferences file is gone")
+}
+
 /**
  * The settings dialog commits every field together, so the tests reach the view
  * model the same way: changing one field is a Save that carries the others

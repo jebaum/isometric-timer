@@ -31,10 +31,13 @@ class MainActivity : ComponentActivity() {
                 RoutineViewModel(
                     // Application context: the view model outlives this activity.
                     store = PreferencesSettingsStore(applicationContext),
-                    player = AndroidCuePlayer(applicationContext),
+                    player = AndroidCuePlayer(applicationContext, failures = LogcatFailureReporter),
                     now = { SystemClock.elapsedRealtime() / 1000.0 },
                     history = SQLiteCompletionHistoryStore(applicationContext),
                     wallNow = System::currentTimeMillis,
+                    // The one place Logcat is wired in, so nothing underneath
+                    // has to know that is where its swallowed failures land.
+                    failures = LogcatFailureReporter,
                 )
             }
         }

@@ -29,6 +29,7 @@ class CueDispatchTest {
 
     private var time = 1_000.0
     private val player = RecordingCuePlayer()
+    private val failures = RecordingFailureReporter()
 
     private fun viewModel(
         settings: Settings = Settings(cycles = 2, holdSeconds = 5, switchSeconds = 2, restSeconds = 4),
@@ -38,6 +39,7 @@ class CueDispatchTest {
         store = FakeSettingsStore(settings, cuesEnabled),
         player = player,
         now = { time },
+        failures = failures,
     )
 
     /** Advances the clock in 50 ms steps, ticking the way the frame loop does. */
@@ -229,6 +231,40 @@ class CueDispatchTest {
             model.snapshot.status,
         )
         assertTrue("cues were still attempted", exploding.played.isNotEmpty())
+    }
+
+    /**
+     * Swallowing the exception is the right call; swallowing the evidence is
+     * not. Without this, a phone whose cues stopped working looks exactly like
+     * a phone with the volume down.
+     */
+    @Test
+    fun `every swallowed cue failure names its cue and carries its exception`() {
+        val exploding = RecordingCuePlayer { error("vendor HAL said no") }
+        val model = viewModel(player = exploding)
+
+        model.toggle()
+        advanceBy(model, 30.0)
+
+        assertEquals(
+            "one report per attempted cue",
+            exploding.played.size,
+            failures.reports.size,
+        )
+        assertEquals(
+            "playing cue ${exploding.played.first()}",
+            failures.operations.first(),
+        )
+        assertEquals("vendor HAL said no", failures.reports.first().second.message)
+    }
+
+    @Test
+    fun `a routine whose cues all succeed reports nothing`() {
+        val model = viewModel()
+        model.toggle()
+        advanceBy(model, 30.0)
+
+        assertEquals(emptyList<String>(), failures.operations)
     }
 
     @Test

@@ -27,7 +27,11 @@ private class Recorder : CuePlayer {
     }
 }
 
-private class History(initial: List<Long> = emptyList()) : CompletionHistoryStore {
+private class History(
+    initial: List<Long> = emptyList(),
+    /** Stands in for a locked or corrupted database. */
+    private val recordFails: Boolean = false,
+) : CompletionHistoryStore {
     val completions = initial.map { WeightedCompletion(it, 0.0) }.toMutableList()
     var closes = 0
 
@@ -35,6 +39,7 @@ private class History(initial: List<Long> = emptyList()) : CompletionHistoryStor
     val entries: List<Long> get() = completions.map { it.completedAtMillis }
 
     override fun record(completedAtMillis: Long, weightLb: Double) {
+        if (recordFails) error("history database is locked")
         completions += WeightedCompletion(completedAtMillis, weightLb)
     }
 
@@ -63,6 +68,7 @@ class RoutineViewModelTest {
 
     private var time = 1_000.0
     private val player = Recorder()
+    private val failures = RecordingFailureReporter()
 
     private fun model(
         settings: Settings = Settings(cycles = 2, holdSeconds = 5, switchSeconds = 2, restSeconds = 4),
@@ -75,6 +81,7 @@ class RoutineViewModelTest {
         now = { time },
         history = history,
         wallNow = wallNow,
+        failures = failures,
     )
 
     private fun advanceBy(m: RoutineViewModel, seconds: Double, step: Double = 1.0 / 60.0) {
@@ -252,6 +259,93 @@ class RoutineViewModelTest {
         assertEquals(completedAt, m.lastCompletionAt)
         assertEquals(1, m.historyVersion)
         assertTrue(player.played.isEmpty())
+    }
+
+    /**
+     * The finish line is the worst place to throw: the routine is over, the
+     * completion cue still has to sound, and the write that failed must not be
+     * left half-applied in memory where a later read would report a completion
+     * that never reached the database.
+     */
+    @Test
+    fun `a history write that fails is reported once and records nothing`() {
+        val history = History(recordFails = true)
+        val m = model(
+            settings = Settings(cycles = 1, holdSeconds = 2, switchSeconds = 0, restSeconds = 0),
+            history = history,
+            wallNow = { 1_700_000_000_000L },
+        )
+
+        m.toggle()
+        advanceBy(m, 6.0)
+        repeat(5) { m.skip() } // keep prodding a finished routine
+
+        assertEquals(RoutineStatus.COMPLETE, m.snapshot.status)
+        assertEquals("the completion was still announced", 1, player.played.count { it is Cue.Done })
+        assertNull(m.lastCompletionAt)
+        assertEquals(0, m.historyVersion)
+        assertEquals(listOf("recording a completion in history"), failures.operations)
+        assertEquals("history database is locked", failures.reports.single().second.message)
+    }
+
+    @Test
+    fun `a preference save that fails still applies in memory and is reported`() {
+        val m = RoutineViewModel(
+            store = FailingSettingsStore(RoutinePreferences(Settings(2, 5, 2, 4))),
+            player = player,
+            now = { time },
+            failures = failures,
+        )
+
+        m.updateWeight(12.5)
+
+        assertEquals(12.5, m.weightLb, 0.0)
+        assertEquals(listOf("saving preferences"), failures.operations)
+        assertEquals("preferences file is gone", failures.reports.single().second.message)
+    }
+
+    @Test
+    fun `a routine that completes cleanly reports nothing`() {
+        val m = model(
+            settings = Settings(cycles = 1, holdSeconds = 2, switchSeconds = 0, restSeconds = 0),
+            history = History(),
+        )
+
+        m.toggle()
+        advanceBy(m, 6.0)
+
+        assertEquals(emptyList<String>(), failures.operations)
+    }
+
+    /**
+     * The diagnostics seam is the newest thing in the failure path and the least
+     * trustworthy: a reporter that throws would otherwise turn a swallowed
+     * history write into a crash at the finish line — the exact outcome the
+     * swallowing exists to prevent. Two failures are stacked deliberately, so
+     * the routine has to survive the store and its observer both throwing.
+     */
+    @Test
+    fun `a reporter that throws cannot take down the routine it observes`() {
+        val exploding = FailureReporter { _, _ -> error("the reporter is the bug now") }
+        val m = RoutineViewModel(
+            store = FakeSettingsStore(
+                Settings(cycles = 1, holdSeconds = 2, switchSeconds = 0, restSeconds = 0),
+                cuesEnabled = true,
+            ),
+            player = player,
+            now = { time },
+            history = History(recordFails = true),
+            wallNow = { 1_700_000_000_000L },
+            failures = exploding,
+        )
+
+        m.toggle()
+        advanceBy(m, 6.0)
+        repeat(5) { m.skip() } // keep prodding a finished routine
+
+        assertEquals(RoutineStatus.COMPLETE, m.snapshot.status)
+        assertEquals("the completion was still announced", 1, player.played.count { it is Cue.Done })
+        assertNull(m.lastCompletionAt)
     }
 
     @Test

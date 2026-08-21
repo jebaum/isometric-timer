@@ -23,12 +23,15 @@ app/src/main/java/dev/jebaum/isometric/
   CompletionHistoryStore.kt  SQLite completion log and its testable interface
   cues/CuePlayer.kt        Cue types and the player interface
   cues/AndroidCuePlayer.kt ToneGenerator + VibrationEffect
+  FailureReporter.kt       Where a swallowed failure goes — pure, no Android imports
+  LogcatFailureReporter.kt Its Android half: one Log.w per swallowed failure
   ui/HistoryDialog.kt      Month calendar derived from completion timestamps
   ui/                      Compose screen, settings dialog, theme, icons
 app/src/test/java/dev/jebaum/isometric/
   CueDispatchTest.kt          The cue state machine's ordinary paths
   RoutineViewModelTest.kt     Its edges: pause, completion, toggle histories, lifecycle
   PreferenceSaves.kt          FakeSettingsStore and the shared Save helpers
+  RecordingFailureReporter.kt Holds what would have been written to Logcat
   timer/RoutineTest.kt        Schedule construction, validation, and clock formatting
   timer/RoutineEdgeTest.kt    Boundary arithmetic: exact marks, skip, drift, clamping
   timer/ScheduleEdgeTest.kt   The edges of the settings dialog's accepted range
