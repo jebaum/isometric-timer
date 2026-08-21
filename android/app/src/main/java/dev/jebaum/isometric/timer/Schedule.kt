@@ -1,8 +1,8 @@
 package dev.jebaum.isometric.timer
 
 /**
- * Port of `timer.js` from the web app. Deliberately free of Android imports so
- * it runs as a plain JVM unit test, mirroring `timer.test.js`.
+ * Routine construction. Deliberately free of Android imports so it runs as a
+ * plain JVM unit test.
  */
 
 data class Settings(

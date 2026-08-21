@@ -9,7 +9,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
-/** Lifted from the custom properties at the top of `styles.css`. */
+/** The single source of colour and type for the app. */
 object Palette {
     val Background = Color(0xFF121016)
     val Surface = Color(0xFF1B1722)

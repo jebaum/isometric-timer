@@ -209,9 +209,10 @@ class RoutineEdgeTest {
         var checked = 0
         while (time < 4_223.456 + 60) {
             val s = routine.snapshot()
-            // app.js: kind === "hold" && secondsLeft <= WARNING_SECONDS && !done
-            val web = s.phase.kind == Kind.HOLD && s.secondsLeft <= WARNING_SECONDS && !s.done
-            assertEquals("at t=$time snapshot=$s", web, s.warning)
+            // The warning flag is exactly "a hold is within its closing seconds".
+            val expected =
+                s.phase.kind == Kind.HOLD && s.secondsLeft <= WARNING_SECONDS && !s.done
+            assertEquals("at t=$time snapshot=$s", expected, s.warning)
             checked += 1
             time += 0.017
         }

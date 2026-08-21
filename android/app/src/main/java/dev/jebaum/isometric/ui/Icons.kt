@@ -10,9 +10,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 
 /**
- * The two inline SVGs from `index.html`, redrawn against the same 24x24 grid so
- * the shapes stay identical to the web app rather than being approximated from
- * the Material icon set.
+ * The two icons the app needs, drawn by hand against a 24x24 grid rather than
+ * approximated from the Material icon set.
  */
 private data class Segment(val x1: Float, val y1: Float, val x2: Float, val y2: Float)
 

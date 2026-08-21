@@ -120,8 +120,8 @@ fun TimerScreen(viewModel: RoutineViewModel) {
         locale = locale,
     )
 
-    // The web app had to juggle the Wake Lock API and reacquire on visibility
-    // change; natively this is the whole feature.
+    // Keeping the screen awake for the length of a routine is the whole
+    // feature, natively.
     val view = LocalView.current
     DisposableEffect(view, active) {
         view.keepScreenOn = active
@@ -499,7 +499,7 @@ private fun Countdown(seconds: Int, color: Color, dimmed: Boolean, availableHeig
             softWrap = false,
             modifier = Modifier
                 .alpha(if (dimmed) 0.7f else 1f)
-                // Mirrors role="timer" + aria-label from the web app.
+                // The digits alone read as a bare number to a screen reader.
                 .semantics { contentDescription = "$seconds seconds remaining" },
         )
     }

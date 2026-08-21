@@ -3,8 +3,8 @@ package dev.jebaum.isometric.cues
 import dev.jebaum.isometric.timer.Kind
 
 /**
- * What native buys over the PWA: during a hold you are usually not looking at
- * the screen, so every phase boundary gets a sound and a vibration.
+ * During a hold you are usually not looking at the screen, so every phase
+ * boundary gets a sound and a vibration.
  */
 sealed interface Cue {
     /** A new phase began. */

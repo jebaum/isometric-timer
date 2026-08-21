@@ -1,46 +1,34 @@
 # Isometric Timer
 
-An isometric-hold interval timer, in two implementations:
+A native Android isometric-hold interval timer — Kotlin and Compose, built to be
+sideloaded onto a personal device rather than published. It sounds and vibrates
+on every phase boundary, which matters because during a hold you are usually not
+looking at the screen.
 
-- **A PWA** at the repository root — installable, offline, no dependencies.
-- **A native Android app** in [`android/`](android/) — Kotlin and Compose, built
-  to be sideloaded. It adds sound and vibration on every phase boundary, which
-  matters because during a hold you are usually not looking at the screen.
+Everything lives in [`android/`](android/); see
+[`android/README.md`](android/README.md) for the toolchain, the build and
+install steps, and the design decisions behind the app.
 
-The routine logic is duplicated across the two (`timer.js` and
-`android/…/timer/`), and so are its tests. A change to how a routine is built or
-timed belongs in both.
-
-## Run locally
-
-Service workers require an HTTP origin, so serve the directory instead of
-opening `index.html` directly:
+## Build and install
 
 ```sh
-python3 -m http.server 8000
+cd android
+./gradlew :app:testDebugUnitTest     # timing core, no device needed
+./gradlew :app:assembleRelease       # -> app/build/outputs/apk/release/app-release.apk
+adb install -r app/build/outputs/apk/release/app-release.apk
 ```
-
-Open <http://localhost:8000>. Run the timing-core tests with:
-
-```sh
-npm test
-```
-
-## Install on Android
-
-Preferred: build and sideload the native app — see
-[`android/README.md`](android/README.md).
-
-As a PWA, visit <https://jebaum.github.io/isometric-timer/> in Chrome on
-Android, then use **Install app** or **Add to Home screen** from Chrome's menu.
-The service worker caches the complete app during the first visit, so later
-routines work offline. While a routine is active, the app requests a screen wake
-lock and reacquires it after returning from another app.
 
 ## Controls
 
 - Tap **Start**, **Pause/Resume**, **Skip**, or **End routine**.
-- A hardware keyboard retains the terminal keys: Space pauses, `s` skips, and
-  `q` ends the routine.
 - Settings are stored only on the device. The defaults are 4 cycles, 35-second
   holds, a 5-second switch, and 90-second rests.
+- Finishing a routine logs a completion; the calendar button shows the history
+  and the recommended eight-hour gap before the next one.
+
+## History
+
+This started as a PWA at the repository root, and the Android app was written to
+match its behaviour. The Android app has since gained functionality the web one
+never had and is now the only implementation; the PWA and the JavaScript parity
+fixture that guarded the port were removed in August 2026.

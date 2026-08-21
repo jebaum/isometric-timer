@@ -7,17 +7,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Ported from `timer.test.js` in the repository root. The two implementations
- * are kept deliberately parallel, so a change to the routine logic should land
- * in both and be provable by both suites.
- *
- * The web suite's final case asserts on the web manifest and service-worker
- * cache list; it has no counterpart here and stays on the JavaScript side.
+ * The routine's agreed shape: how a schedule is built from settings, which
+ * settings are rejected, and how a remaining duration reads on the clock.
  */
 class RoutineTest {
 
     @Test
-    fun `the default schedule matches the web app`() {
+    fun `the default routine is four cycles of right, switch, left, rest`() {
         val phases = buildSchedule(DEFAULT_SETTINGS)
         assertEquals(15, phases.size)
         assertEquals(570, phases.sumOf { it.seconds })

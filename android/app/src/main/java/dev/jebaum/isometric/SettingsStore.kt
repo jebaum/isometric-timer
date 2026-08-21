@@ -19,7 +19,8 @@ interface SettingsStore {
 /**
  * Deliberately synchronous. DataStore would push the first read off the main
  * thread, but for five values that only buys a frame of the wrong routine on
- * launch; the file name matches the web app's `STORAGE_KEY` for continuity.
+ * launch. The preferences file name is load-bearing: changing it strands the
+ * settings already saved on the device.
  */
 class PreferencesSettingsStore(context: Context) : SettingsStore {
     private val preferences =

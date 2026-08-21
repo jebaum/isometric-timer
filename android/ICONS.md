@@ -36,8 +36,7 @@ warning is cosmetic; the suggested fix does not build.
 
 Adaptive icon layers are 108×108dp but only the centre 72dp is guaranteed
 visible — the outer 18dp per edge is reserved for masking and the parallax
-launchers apply on press. That is a tighter budget than the web manifest's
-`maskable` icons, which get 80%.
+launchers apply on press. Two thirds of the frame is a tight budget.
 
 The full illustration spans 76% × 94% of its frame, so scaling it to fit would
 have left the limb small and adrift. Instead the layers are cropped in on the
