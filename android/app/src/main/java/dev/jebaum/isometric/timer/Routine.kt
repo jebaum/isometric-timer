@@ -3,6 +3,39 @@ package dev.jebaum.isometric.timer
 import kotlin.math.ceil
 
 /**
+ * Where the routine stands in its lifecycle.
+ *
+ * One value rather than independent flags, because these four states are not
+ * independent: PAUSED implies started, and COMPLETE outranks a pause. Separate
+ * booleans would leave combinations the timer can never reach — "paused before
+ * it ever started" — merely unreachable rather than unrepresentable.
+ */
+enum class RoutineStatus {
+    /** Built, never started. The countdown shows the opening phase in full. */
+    READY,
+
+    /** Started, clock advancing. */
+    RUNNING,
+
+    /** Started, clock held. */
+    PAUSED,
+
+    /** The whole schedule has elapsed. */
+    COMPLETE,
+}
+
+/**
+ * A routine that is started and not yet finished — what keeps the screen awake,
+ * the Skip button live, and the settings dialog shut. Derived from the status
+ * rather than published alongside it, so the two cannot disagree.
+ */
+val RoutineStatus.underway: Boolean
+    get() = when (this) {
+        RoutineStatus.RUNNING, RoutineStatus.PAUSED -> true
+        RoutineStatus.READY, RoutineStatus.COMPLETE -> false
+    }
+
+/**
  * Everything about the routine that changes at most once a second.
  *
  * Progress is deliberately *not* here: it changes every frame, and a data class
@@ -19,9 +52,7 @@ data class Snapshot(
     val totalLeft: Int,
     val cycle: Int,
     val cycles: Int,
-    val paused: Boolean,
-    val started: Boolean,
-    val done: Boolean,
+    val status: RoutineStatus,
 ) {
     /**
      * The closing seconds of a hold. Derived once here because its two
@@ -29,7 +60,9 @@ data class Snapshot(
      * apart.
      */
     val warning: Boolean
-        get() = !done && phase.kind == Kind.HOLD && secondsLeft in 1..WARNING_SECONDS
+        get() = status != RoutineStatus.COMPLETE &&
+            phase.kind == Kind.HOLD &&
+            secondsLeft in 1..WARNING_SECONDS
 }
 
 /**
@@ -53,21 +86,30 @@ class Routine(
     private val origin: Double = now()
     private var offset: Double = 0.0
     private var pausedAt: Double? = if (startPaused) origin else null
-
-    var started: Boolean = !startPaused
-        private set
-
-    val paused: Boolean get() = pausedAt != null
+    private var hasStarted: Boolean = !startPaused
 
     fun elapsed(): Double = (pausedAt ?: now()) - origin - offset
 
-    fun done(): Boolean = elapsed() >= total
+    /** The one lifecycle fact this class publishes. */
+    fun status(): RoutineStatus = statusAt(elapsed())
+
+    /**
+     * Completion is read off the elapsed value rather than the fields, so
+     * [snapshotAt] can describe an instant the clock is not sitting on. The
+     * arm order enforces the precedence documented on [RoutineStatus].
+     */
+    private fun statusAt(elapsed: Double): RoutineStatus = when {
+        elapsed >= total -> RoutineStatus.COMPLETE
+        !hasStarted -> RoutineStatus.READY
+        pausedAt != null -> RoutineStatus.PAUSED
+        else -> RoutineStatus.RUNNING
+    }
 
     fun indexAt(elapsed: Double): Int =
         minOf(bisectRight(marks, elapsed) - 1, phases.size - 1)
 
     fun togglePause() {
-        if (done()) return
+        if (status() == RoutineStatus.COMPLETE) return
 
         val at = pausedAt
         if (at == null) {
@@ -75,12 +117,12 @@ class Routine(
         } else {
             offset += now() - at
             pausedAt = null
-            started = true
+            hasStarted = true
         }
     }
 
     fun skip() {
-        if (done()) return
+        if (status() == RoutineStatus.COMPLETE) return
 
         val elapsed = elapsed()
         val index = indexAt(elapsed)
@@ -106,7 +148,8 @@ class Routine(
     fun snapshot(): Snapshot = snapshotAt(elapsed())
 
     fun snapshotAt(elapsed: Double): Snapshot {
-        val done = elapsed >= total
+        val status = statusAt(elapsed)
+        val done = status == RoutineStatus.COMPLETE
         val index = indexAt(elapsed)
         val phase = phases[index]
         val into = if (done) phase.seconds.toDouble() else elapsed - marks[index]
@@ -119,9 +162,7 @@ class Routine(
             totalLeft = if (done) 0 else maxOf(0, ceil(total - elapsed).toInt()),
             cycle = phase.cycle,
             cycles = cycles,
-            paused = paused,
-            started = started,
-            done = done,
+            status = status,
         )
     }
 }

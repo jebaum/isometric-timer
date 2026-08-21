@@ -1,9 +1,7 @@
 package dev.jebaum.isometric.timer
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -75,12 +73,51 @@ class RoutineTest {
         time = 110.0
         assertEquals(0.0, routine.elapsed(), TOLERANCE)
         assertEquals(35, routine.snapshot().secondsLeft)
-        assertFalse(routine.snapshot().started)
+        assertEquals(RoutineStatus.READY, routine.snapshot().status)
 
         routine.togglePause()
         time = 111.0
         assertEquals(1.0, routine.elapsed(), TOLERANCE)
-        assertTrue(routine.snapshot().started)
+        assertEquals(RoutineStatus.RUNNING, routine.snapshot().status)
+    }
+
+    /**
+     * The lifecycle as one sequence. Every transition the timer can make is
+     * asserted on the value the snapshot publishes, so a status that stopped
+     * moving — or landed on one the routine cannot actually reach, such as
+     * PAUSED before it ever started — fails here rather than in the UI.
+     */
+    @Test
+    fun `status moves ready to running to paused to running to complete`() {
+        var time = 0.0
+        val routine = Routine(
+            buildSchedule(Settings(cycles = 1, hold = 5, switch = 0, rest = 0)),
+            now = { time },
+        )
+        assertEquals(RoutineStatus.READY, routine.status())
+        assertEquals(RoutineStatus.READY, routine.snapshot().status)
+
+        routine.togglePause() // Start
+        assertEquals(RoutineStatus.RUNNING, routine.snapshot().status)
+
+        time = 2.0
+        routine.togglePause() // Pause
+        assertEquals(RoutineStatus.PAUSED, routine.snapshot().status)
+
+        time = 60.0 // held: the clock moving must not finish a paused routine
+        assertEquals(RoutineStatus.PAUSED, routine.snapshot().status)
+
+        routine.togglePause() // Resume
+        assertEquals(RoutineStatus.RUNNING, routine.snapshot().status)
+
+        time = 68.5 // 10.5s of running time against a 10s schedule
+        assertEquals(RoutineStatus.COMPLETE, routine.status())
+        assertEquals(RoutineStatus.COMPLETE, routine.snapshot().status)
+
+        // And COMPLETE is terminal: neither button can move it again.
+        routine.togglePause()
+        routine.skip()
+        assertEquals(RoutineStatus.COMPLETE, routine.snapshot().status)
     }
 
     @Test
@@ -118,7 +155,7 @@ class RoutineTest {
         repeat(routine.phases.size + 5) { routine.skip() }
 
         val snapshot = routine.snapshot()
-        assertTrue(snapshot.done)
+        assertEquals(RoutineStatus.COMPLETE, snapshot.status)
         assertEquals(0, snapshot.secondsLeft)
         assertEquals(0, snapshot.totalLeft)
         assertEquals("DONE", snapshot.next)

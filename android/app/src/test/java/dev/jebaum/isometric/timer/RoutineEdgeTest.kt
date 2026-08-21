@@ -1,7 +1,6 @@
 package dev.jebaum.isometric.timer
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -23,7 +22,7 @@ class RoutineEdgeTest {
         assertEquals(LABEL_LEFT, s.phase.label)
         assertEquals(5, s.secondsLeft)
         assertEquals(0f, routine.progress(), 1e-6f)
-        assertFalse(s.done)
+        assertEquals(RoutineStatus.RUNNING, s.status)
     }
 
     @Test
@@ -32,7 +31,7 @@ class RoutineEdgeTest {
         val routine = Routine(buildSchedule(short), now = { time }, startPaused = false)
         time = 10.0
         val s = routine.snapshot()
-        assertTrue(s.done)
+        assertEquals(RoutineStatus.COMPLETE, s.status)
         assertEquals(routine.phases.size - 1, s.index)
         assertEquals(0, s.secondsLeft)
         assertEquals(0, s.totalLeft)
@@ -46,7 +45,7 @@ class RoutineEdgeTest {
         val routine = Routine(buildSchedule(DEFAULT_SETTINGS), now = { time }, startPaused = false)
         time = 1_000_000.0
         val s = routine.snapshot()
-        assertTrue(s.done)
+        assertEquals(RoutineStatus.COMPLETE, s.status)
         assertEquals(routine.phases.size - 1, s.index)
         assertEquals(4, s.cycle)
     }
@@ -58,8 +57,8 @@ class RoutineEdgeTest {
         routine.skip() // -> LEFT SIDE
         assertEquals(LABEL_LEFT, routine.snapshot().phase.label)
         routine.skip() // -> done
-        assertTrue(routine.done())
-        assertTrue(routine.snapshot().done)
+        assertEquals(RoutineStatus.COMPLETE, routine.status())
+        assertEquals(RoutineStatus.COMPLETE, routine.snapshot().status)
     }
 
     @Test
@@ -69,9 +68,15 @@ class RoutineEdgeTest {
         time = 6.0
         routine.togglePause() // paused inside LEFT SIDE
         routine.skip()
-        assertTrue("paused skip off the end should finish", routine.done())
+        // Completion outranks the hold: a routine carried off the end while
+        // paused is finished, not paused, and the status says so once.
+        assertEquals(
+            "paused skip off the end should finish",
+            RoutineStatus.COMPLETE,
+            routine.status(),
+        )
         val s = routine.snapshot()
-        assertTrue(s.done)
+        assertEquals(RoutineStatus.COMPLETE, s.status)
         assertEquals(0, s.secondsLeft)
     }
 
@@ -83,9 +88,15 @@ class RoutineEdgeTest {
         val before = routine.elapsed()
         routine.togglePause()
         routine.skip()
-        assertFalse(routine.paused)
-        assertEquals(before, routine.elapsed(), 1e-9)
-        assertTrue(routine.done())
+        assertEquals("the skip moved a finished routine", before, routine.elapsed(), 1e-9)
+        assertEquals(RoutineStatus.COMPLETE, routine.status())
+
+        // That the *pause* was refused needs a second clock read to show. A
+        // pause takes hold by pinning elapsed to the instant it was taken, so a
+        // routine that had quietly accepted one would still read 20 here.
+        time = 30.0
+        assertEquals("the pause took hold after the finish", 30.0, routine.elapsed(), 1e-9)
+        assertEquals(RoutineStatus.COMPLETE, routine.status())
     }
 
     @Test
@@ -108,7 +119,7 @@ class RoutineEdgeTest {
         var time = 500.0
         val routine = Routine(buildSchedule(DEFAULT_SETTINGS), now = { time }, startPaused = false)
         var lastTotal = Int.MAX_VALUE
-        while (!routine.done()) {
+        while (routine.status() != RoutineStatus.COMPLETE) {
             time += 0.05
             val s = routine.snapshot()
             assertTrue("totalLeft rose: $lastTotal -> ${s.totalLeft}", s.totalLeft <= lastTotal)
@@ -203,7 +214,9 @@ class RoutineEdgeTest {
             val s = routine.snapshot()
             // The warning flag is exactly "a hold is within its closing seconds".
             val expected =
-                s.phase.kind == Kind.HOLD && s.secondsLeft <= WARNING_SECONDS && !s.done
+                s.phase.kind == Kind.HOLD &&
+                    s.secondsLeft <= WARNING_SECONDS &&
+                    s.status != RoutineStatus.COMPLETE
             assertEquals("at t=$time snapshot=$s", expected, s.warning)
             checked += 1
             time += 0.017
@@ -222,7 +235,9 @@ class RoutineEdgeTest {
         )
         while (time < 12.0) {
             val s = routine.snapshot()
-            if (!s.done) assertTrue("secondsLeft=${s.secondsLeft} at t=$time", s.secondsLeft >= 1)
+            if (s.status != RoutineStatus.COMPLETE) {
+                assertTrue("secondsLeft=${s.secondsLeft} at t=$time", s.secondsLeft >= 1)
+            }
             time += 0.001
         }
     }
@@ -260,7 +275,7 @@ class RoutineEdgeTest {
         while (elapsed <= routine.total + 1.0) {
             val s = routine.snapshotAt(elapsed)
             val p = routine.progressAt(elapsed)
-            if (s.done) {
+            if (s.status == RoutineStatus.COMPLETE) {
                 assertEquals("progress at/after total", 1f, p, 0f)
             } else {
                 // Compared in Double and only then narrowed: round-tripping

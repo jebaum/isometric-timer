@@ -9,10 +9,12 @@ import androidx.lifecycle.ViewModel
 import dev.jebaum.isometric.cues.Cue
 import dev.jebaum.isometric.cues.CuePlayer
 import dev.jebaum.isometric.timer.Routine
+import dev.jebaum.isometric.timer.RoutineStatus
 import dev.jebaum.isometric.timer.Settings
 import dev.jebaum.isometric.timer.Snapshot
 import dev.jebaum.isometric.timer.buildSchedule
 import dev.jebaum.isometric.timer.isValid
+import dev.jebaum.isometric.timer.underway
 
 /**
  * Holds the routine across configuration changes, so a rotation mid-hold does
@@ -47,7 +49,7 @@ class RoutineViewModel(
              * -1 sentinel or its opening cue is lost.
              */
             fun syncedTo(snapshot: Snapshot): CueState =
-                if (snapshot.started && !snapshot.done) {
+                if (snapshot.status.underway) {
                     CueState(snapshot.index, snapshot.secondsLeft)
                 } else {
                     CueState()
@@ -88,11 +90,13 @@ class RoutineViewModel(
 
     private var cueState = CueState()
 
+    /** A routine is in progress, running or paused. Keeps the screen awake. */
     val active: Boolean
-        get() = snapshot.started && !snapshot.done
+        get() = snapshot.status.underway
 
+    /** The frame loop's condition: only RUNNING needs a tick every frame. */
     val running: Boolean
-        get() = active && !snapshot.paused
+        get() = snapshot.status == RoutineStatus.RUNNING
 
     private fun newRoutine() = Routine(buildSchedule(settings), now = now)
 
@@ -106,33 +110,39 @@ class RoutineViewModel(
         snapshot = next
         progress = routine.progressAt(elapsed)
 
-        val completed = next.done && !previous.done
+        val completed = next.status == RoutineStatus.COMPLETE &&
+            previous.status != RoutineStatus.COMPLETE
         if (completed) rememberCompletion()
 
         // Completion history is independent of audible cues, so this return
         // deliberately comes after the transition is recorded.
         if (!cuesEnabled) return
 
-        if (!next.started) {
-            cueState = CueState()
-            return
-        }
+        when (next.status) {
+            // Nothing has been announced yet, and the -1 sentinel is what makes
+            // the next Start open with a cue.
+            RoutineStatus.READY -> cueState = CueState()
 
-        when {
-            next.done -> if (completed) emit(Cue.Done)
+            // A routine skipped off the end without ever starting completes
+            // silently: no cue opened it, so none closes it.
+            RoutineStatus.COMPLETE ->
+                if (completed && previous.status != RoutineStatus.READY) emit(Cue.Done)
 
-            // Covers both the first Start and every later phase boundary. Keyed
-            // off the index rather than secondsLeft so a long frame gap cannot
-            // fire a cue twice. A gap spanning an entire phase announces only
-            // the phase actually landed on, which is the intent.
-            next.index != cueState.index -> {
-                cueState = CueState(next.index, 0)
-                emit(Cue.Enter(next.phase.kind))
-            }
+            RoutineStatus.RUNNING, RoutineStatus.PAUSED -> when {
+                // Covers both the first Start and every later phase boundary.
+                // Keyed off the index rather than secondsLeft so a long frame
+                // gap cannot fire a cue twice. A gap spanning an entire phase
+                // announces only the phase actually landed on, which is the
+                // intent.
+                next.index != cueState.index -> {
+                    cueState = CueState(next.index, 0)
+                    emit(Cue.Enter(next.phase.kind))
+                }
 
-            next.warning && next.secondsLeft != cueState.warning -> {
-                cueState = cueState.copy(warning = next.secondsLeft)
-                emit(Cue.Warn)
+                next.warning && next.secondsLeft != cueState.warning -> {
+                    cueState = cueState.copy(warning = next.secondsLeft)
+                    emit(Cue.Warn)
+                }
             }
         }
     }
@@ -158,7 +168,7 @@ class RoutineViewModel(
     fun tick() = publish()
 
     fun toggle() {
-        if (routine.done()) {
+        if (routine.status() == RoutineStatus.COMPLETE) {
             // Announce first: the routine can cross the finish line with no tick
             // in between (the frame clock parks while backgrounded), and
             // resetting straight through would swallow the completion cue — the
@@ -208,7 +218,7 @@ class RoutineViewModel(
         // A finished routine resets too, even when nothing about the schedule
         // moved: saving from the completion screen is how you get back to READY,
         // and leaving it done would strand the Save behind a "Done" button.
-        if (settingsChanged || snapshot.done) {
+        if (settingsChanged || snapshot.status == RoutineStatus.COMPLETE) {
             // Once. `reset()` clears the cue state itself, so there is nothing
             // left to resynchronize afterwards.
             reset()

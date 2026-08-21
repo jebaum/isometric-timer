@@ -3,6 +3,7 @@ package dev.jebaum.isometric
 import dev.jebaum.isometric.cues.Cue
 import dev.jebaum.isometric.cues.CuePlayer
 import dev.jebaum.isometric.timer.Kind
+import dev.jebaum.isometric.timer.RoutineStatus
 import dev.jebaum.isometric.timer.Settings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -97,6 +98,22 @@ class CueDispatchTest {
         assertEquals(1, player.played.count { it is Cue.Done })
     }
 
+    /**
+     * Skip has no started-guard, so the public API can carry a never-started
+     * routine off the end. No cue opened that routine, so none may close it —
+     * the completion is silent, as it was before status replaced the booleans.
+     */
+    @Test
+    fun `skipping a never-started routine off the end completes it silently`() {
+        val model = viewModel(Settings(cycles = 1, hold = 5, switch = 0, rest = 0))
+
+        model.skip()
+        model.skip()
+
+        assertEquals(RoutineStatus.COMPLETE, model.snapshot.status)
+        assertEquals(emptyList<Cue>(), player.played)
+    }
+
     @Test
     fun `the closing seconds of a hold warn once each`() {
         val model = viewModel(Settings(cycles = 1, hold = 10, switch = 0, rest = 0))
@@ -115,7 +132,7 @@ class CueDispatchTest {
         // Four holds of 4s, each warning at 3, 2 and 1 second remaining, and
         // nothing at all from the two switches or the rest.
         assertEquals(12, player.played.count { it is Cue.Warn })
-        assertTrue(model.snapshot.done)
+        assertEquals(RoutineStatus.COMPLETE, model.snapshot.status)
     }
 
     @Test
@@ -188,7 +205,7 @@ class CueDispatchTest {
 
         model.setSettings(Settings(cycles = 1, hold = 3, switch = 0, rest = 0))
         assertTrue(player.played.isEmpty())
-        assertTrue(!model.snapshot.started)
+        assertEquals(RoutineStatus.READY, model.snapshot.status)
 
         model.toggle()
         assertEquals(listOf<Cue>(Cue.Enter(Kind.HOLD)), player.played)
@@ -206,7 +223,11 @@ class CueDispatchTest {
         model.toggle()
         run(model, 30.0)
 
-        assertTrue("the routine still finished", model.snapshot.done)
+        assertEquals(
+            "the routine still finished",
+            RoutineStatus.COMPLETE,
+            model.snapshot.status,
+        )
         assertTrue("cues were still attempted", exploding.played.isNotEmpty())
     }
 

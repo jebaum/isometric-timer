@@ -68,9 +68,11 @@ import androidx.compose.ui.unit.sp
 import dev.jebaum.isometric.RoutineViewModel
 import dev.jebaum.isometric.timer.Kind
 import dev.jebaum.isometric.timer.Phase
+import dev.jebaum.isometric.timer.RoutineStatus
 import dev.jebaum.isometric.timer.Settings
 import dev.jebaum.isometric.timer.Snapshot
 import dev.jebaum.isometric.timer.clock
+import dev.jebaum.isometric.timer.underway
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -151,8 +153,9 @@ fun TimerScreen(viewModel: RoutineViewModel) {
         historyMessage = if (active) null else historyMessage,
         onToggle = {
             currentZone = ZoneId.systemDefault()
-            val snapshot = viewModel.snapshot
-            val warningAt = if (!snapshot.started && !snapshot.done) {
+            // Only the tap that actually starts a routine is worth warning
+            // about; Pause, Resume and Again are not.
+            val warningAt = if (viewModel.snapshot.status == RoutineStatus.READY) {
                 viewModel.spacingWarningAt()
             } else {
                 null
@@ -368,7 +371,7 @@ private fun TimerBody(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = stateLabel(snapshot),
+            text = stateLabel(snapshot.status),
             color = accent,
             style = StatusLabelStyle,
             // A phase change is worth announcing. Deliberately not on the
@@ -377,7 +380,7 @@ private fun TimerBody(
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = if (snapshot.done) "DONE" else snapshot.phase.label,
+            text = if (snapshot.status == RoutineStatus.COMPLETE) "DONE" else snapshot.phase.label,
             color = Palette.Text,
             fontSize = 32.sp,
             fontWeight = FontWeight.Bold,
@@ -388,7 +391,12 @@ private fun TimerBody(
         Countdown(
             seconds = snapshot.secondsLeft,
             color = countdownColor,
-            dimmed = !snapshot.started || snapshot.paused,
+            // Dimmed while the clock is not moving *towards* anything: a
+            // routine waiting to start, or one held mid-phase.
+            dimmed = when (snapshot.status) {
+                RoutineStatus.READY, RoutineStatus.PAUSED -> true
+                RoutineStatus.RUNNING, RoutineStatus.COMPLETE -> false
+            },
             availableHeight = availableHeight,
         )
 
@@ -422,12 +430,12 @@ private fun TimerBody(
                     contentColor = Palette.OnAccent,
                 ),
             ) {
-                Text(startLabel(snapshot), fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                Text(startLabel(snapshot.status), fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
             }
             Spacer(Modifier.width(12.dp))
             Button(
                 onClick = onSkip,
-                enabled = snapshot.started && !snapshot.done,
+                enabled = snapshot.status.underway,
                 modifier = Modifier
                     .width(116.dp)
                     .height(56.dp),
@@ -443,7 +451,11 @@ private fun TimerBody(
             }
         }
 
-        val resettable = snapshot.started || snapshot.done
+        // Everything but a routine that has not begun: there is nothing to end.
+        val resettable = when (snapshot.status) {
+            RoutineStatus.READY -> false
+            RoutineStatus.RUNNING, RoutineStatus.PAUSED, RoutineStatus.COMPLETE -> true
+        }
         TextButton(onClick = onReset, enabled = resettable) {
             Text(
                 "End routine",
@@ -627,18 +639,19 @@ private fun NextPhase(next: String, accent: Color) {
     }
 }
 
-private fun stateLabel(snapshot: Snapshot) = when {
-    snapshot.done -> "COMPLETE"
-    !snapshot.started -> "READY"
-    snapshot.paused -> "PAUSED"
-    else -> "IN PROGRESS"
+private fun stateLabel(status: RoutineStatus) = when (status) {
+    RoutineStatus.READY -> "READY"
+    RoutineStatus.RUNNING -> "IN PROGRESS"
+    RoutineStatus.PAUSED -> "PAUSED"
+    RoutineStatus.COMPLETE -> "COMPLETE"
 }
 
-private fun startLabel(snapshot: Snapshot) = when {
-    snapshot.done -> "Again"
-    !snapshot.started -> "Start"
-    snapshot.paused -> "Resume"
-    else -> "Pause"
+/** What the primary button does next, which is one thing per status. */
+private fun startLabel(status: RoutineStatus) = when (status) {
+    RoutineStatus.READY -> "Start"
+    RoutineStatus.RUNNING -> "Pause"
+    RoutineStatus.PAUSED -> "Resume"
+    RoutineStatus.COMPLETE -> "Again"
 }
 
 private fun historyMessage(
@@ -689,9 +702,7 @@ private fun previewSnapshot(
     next: String = "SWITCH",
     totalLeft: Int = 570,
     cycle: Int = 1,
-    paused: Boolean = false,
-    started: Boolean = true,
-    done: Boolean = false,
+    status: RoutineStatus = RoutineStatus.RUNNING,
 ) = Snapshot(
     phase = Phase(label, 35, kind, cycle),
     index = 0,
@@ -700,9 +711,7 @@ private fun previewSnapshot(
     totalLeft = totalLeft,
     cycle = cycle,
     cycles = 4,
-    paused = paused,
-    started = started,
-    done = done,
+    status = status,
 )
 
 @Composable
@@ -711,10 +720,10 @@ private fun PreviewFrame(snapshot: Snapshot, progress: Float) {
         TimerContent(
             snapshot = snapshot,
             progress = { progress },
-            idle = !snapshot.started || snapshot.done,
+            idle = !snapshot.status.underway,
             weight = "12.5 lb",
             onWeight = {},
-            historyMessage = if (snapshot.started && !snapshot.done) {
+            historyMessage = if (snapshot.status.underway) {
                 null
             } else {
                 "1 routine today · Next after 4:35 PM"
@@ -727,12 +736,17 @@ private fun PreviewFrame(snapshot: Snapshot, progress: Float) {
 @Preview(name = "Ready", showBackground = true)
 @Composable
 private fun ReadyPreview() =
-    PreviewFrame(previewSnapshot(started = false), 0f)
+    PreviewFrame(previewSnapshot(status = RoutineStatus.READY), 0f)
 
 @Preview(name = "In progress", showBackground = true)
 @Composable
 private fun RunningPreview() =
     PreviewFrame(previewSnapshot(secondsLeft = 21), 0.4f)
+
+@Preview(name = "Paused", showBackground = true)
+@Composable
+private fun PausedPreview() =
+    PreviewFrame(previewSnapshot(secondsLeft = 21, status = RoutineStatus.PAUSED), 0.4f)
 
 @Preview(name = "Hold warning", showBackground = true)
 @Composable
@@ -751,7 +765,13 @@ private fun RestPreview() =
 @Composable
 private fun CompletePreview() =
     PreviewFrame(
-        previewSnapshot(secondsLeft = 0, next = "DONE", totalLeft = 0, cycle = 4, done = true),
+        previewSnapshot(
+            secondsLeft = 0,
+            next = "DONE",
+            totalLeft = 0,
+            cycle = 4,
+            status = RoutineStatus.COMPLETE,
+        ),
         1f,
     )
 

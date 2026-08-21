@@ -3,6 +3,7 @@ package dev.jebaum.isometric
 import dev.jebaum.isometric.cues.Cue
 import dev.jebaum.isometric.cues.CuePlayer
 import dev.jebaum.isometric.timer.Kind
+import dev.jebaum.isometric.timer.RoutineStatus
 import dev.jebaum.isometric.timer.Settings
 import dev.jebaum.isometric.timer.WARNING_SECONDS
 import java.time.ZoneId
@@ -204,7 +205,7 @@ class RoutineViewModelTest {
     }
 
     /**
-     * Regression: `toggle()` short-circuits on the live `routine.done()`, so a
+     * Regression: `toggle()` short-circuits on the live `routine.status()`, so a
      * tap landing after the routine finished but before the frame loop ticked
      * used to reset straight through the completion without announcing it.
      */
@@ -213,7 +214,7 @@ class RoutineViewModelTest {
         val m = model(Settings(cycles = 1, hold = 2, switch = 0, rest = 0))
         m.toggle()
         run(m, 3.9) // still inside the routine (total 4s)
-        assertFalse(m.snapshot.done)
+        assertEquals(RoutineStatus.RUNNING, m.snapshot.status)
         player.played.clear()
 
         time += 0.2 // the routine crosses the finish line with no tick in between
@@ -223,7 +224,11 @@ class RoutineViewModelTest {
             "expected a Done cue before the reset; got ${player.played}",
             player.played.any { it is Cue.Done },
         )
-        assertFalse("the tap should also have reset the routine", m.snapshot.started)
+        assertEquals(
+            "the tap should also have reset the routine",
+            RoutineStatus.READY,
+            m.snapshot.status,
+        )
     }
 
     @Test
@@ -449,7 +454,7 @@ class RoutineViewModelTest {
 
             m.updatePreferences(Settings(1, 3, 0, 0), cuesEnabled = true)
 
-            assertFalse("cuesWereOn=$cuesWereOn", m.snapshot.started)
+            assertEquals("cuesWereOn=$cuesWereOn", RoutineStatus.READY, m.snapshot.status)
             assertTrue("the rebuild announced something: ${recorder.played}", recorder.played.isEmpty())
 
             m.toggle()
@@ -495,12 +500,15 @@ class RoutineViewModelTest {
         val m = RoutineViewModel(FakeSettingsStore(settings), player, { time })
         m.toggle()
         run(m, 6.0)
-        assertTrue("the routine never finished", m.snapshot.done)
+        assertEquals("the routine never finished", RoutineStatus.COMPLETE, m.snapshot.status)
 
         m.updatePreferences(settings, cuesEnabled = true)
 
-        assertFalse("the save left the completion screen up", m.snapshot.done)
-        assertFalse(m.snapshot.started)
+        assertEquals(
+            "the save left the completion screen up",
+            RoutineStatus.READY,
+            m.snapshot.status,
+        )
     }
 
     /**
@@ -551,7 +559,7 @@ class RoutineViewModelTest {
 
         assertEquals("RIGHT SIDE", m.snapshot.phase.label)
         assertEquals(1, m.snapshot.secondsLeft)
-        assertFalse(m.snapshot.done)
+        assertEquals(RoutineStatus.RUNNING, m.snapshot.status)
         assertTrue(
             "progress ${m.progress} disagrees with the phase the snapshot names",
             m.progress > 0.99f,
@@ -571,7 +579,7 @@ class RoutineViewModelTest {
 
         m.toggle() // resume
         run(m, 30.0)
-        assertTrue(m.snapshot.done)
+        assertEquals(RoutineStatus.COMPLETE, m.snapshot.status)
         assertEquals(1f, m.progress, 0f)
         assertEquals(
             0f,
@@ -642,6 +650,76 @@ class RoutineViewModelTest {
         m.toggle()
         m.toggle()
         assertEquals(listOf<Cue>(Cue.Enter(Kind.HOLD)), player.played)
-        assertTrue(m.snapshot.paused)
+        assertEquals(RoutineStatus.PAUSED, m.snapshot.status)
+    }
+
+    // ---- status ------------------------------------------------------------
+
+    /**
+     * Every transition the buttons can drive, asserted on the published status
+     * one step at a time — and on [RoutineViewModel.running], because the frame
+     * loop's condition is the reason a wrong status would show up as a frozen
+     * or a runaway countdown rather than a wrong label.
+     */
+    @Test
+    fun `status walks the routine lifecycle one transition at a time`() {
+        val m = model(Settings(cycles = 1, hold = 5, switch = 0, rest = 0))
+        assertEquals(RoutineStatus.READY, m.snapshot.status)
+        assertFalse("the frame loop started before Start", m.running)
+        assertFalse(m.active)
+
+        m.toggle() // Start
+        assertEquals(RoutineStatus.RUNNING, m.snapshot.status)
+        assertTrue("the frame loop did not start", m.running)
+        assertTrue(m.active)
+
+        run(m, 2.0)
+        m.toggle() // Pause
+        assertEquals(RoutineStatus.PAUSED, m.snapshot.status)
+        assertFalse("the frame loop kept running while paused", m.running)
+        assertTrue("a paused routine is still in progress", m.active)
+
+        m.toggle() // Resume
+        assertEquals(RoutineStatus.RUNNING, m.snapshot.status)
+        assertTrue(m.running)
+
+        run(m, 20.0) // past the 10s schedule
+        assertEquals(RoutineStatus.COMPLETE, m.snapshot.status)
+        assertFalse("the frame loop kept running after the finish", m.running)
+        assertFalse("a finished routine does not hold the screen awake", m.active)
+
+        m.toggle() // "Again"
+        assertEquals(RoutineStatus.READY, m.snapshot.status)
+        assertFalse(m.running)
+        assertFalse(m.active)
+    }
+
+    @Test
+    fun `skip advances phases without leaving RUNNING, and ending returns to READY`() {
+        val m = model(Settings(cycles = 1, hold = 5, switch = 2, rest = 0))
+        m.toggle()
+
+        m.skip()
+        assertEquals("SWITCH", m.snapshot.phase.label)
+        assertEquals(RoutineStatus.RUNNING, m.snapshot.status)
+
+        m.reset()
+        assertEquals(RoutineStatus.READY, m.snapshot.status)
+        assertEquals("RIGHT SIDE", m.snapshot.phase.label)
+    }
+
+    /** Skipping off the end while paused lands on COMPLETE, not PAUSED. */
+    @Test
+    fun `skipping off the end from a pause lands on COMPLETE`() {
+        val m = model(Settings(cycles = 1, hold = 5, switch = 0, rest = 0))
+        m.toggle()
+        run(m, 1.0)
+        m.toggle() // pause
+        assertEquals(RoutineStatus.PAUSED, m.snapshot.status)
+
+        repeat(4) { m.skip() }
+
+        assertEquals(RoutineStatus.COMPLETE, m.snapshot.status)
+        assertFalse(m.running)
     }
 }
