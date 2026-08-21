@@ -14,7 +14,6 @@ import dev.jebaum.isometric.timer.Settings
 import dev.jebaum.isometric.timer.Snapshot
 import dev.jebaum.isometric.timer.buildSchedule
 import dev.jebaum.isometric.timer.isValid
-import kotlin.math.round
 
 /**
  * Holds the routine across configuration changes, so a rotation mid-hold does
@@ -201,12 +200,10 @@ class RoutineViewModel(
      * not change the schedule, only what a completion records.
      */
     fun updateWeight(valueLb: Double) {
-        require(valueLb in 0.0..MAX_WEIGHT_LB) { "weight outside the accepted range: $valueLb" }
-        // Two decimals is the finest the entry field accepts; rounding here
-        // keeps arithmetic artifacts out of storage.
-        val rounded = round(valueLb * 100) / 100.0
-        weightLb = rounded
-        store.weightLb = rounded
+        require(isValidWeightLb(valueLb)) { "weight outside the accepted range: $valueLb" }
+        val quantized = quantizeWeightLb(valueLb)
+        weightLb = quantized
+        store.weightLb = quantized
     }
 
     fun weightHistory(): List<WeightedCompletion> = history.weightHistory()
@@ -228,6 +225,5 @@ class RoutineViewModel(
 
     companion object {
         const val MINIMUM_COMPLETION_GAP_MILLIS = 8L * 60L * 60L * 1_000L
-        const val MAX_WEIGHT_LB = 500.0
     }
 }

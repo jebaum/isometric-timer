@@ -1,6 +1,5 @@
 package dev.jebaum.isometric.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -313,28 +313,29 @@ private fun WeightSection(chart: WeightChart, locale: Locale) {
                 .weight(1f)
                 .height(72.dp),
         )
-        val flat = chart.minWeightLb == chart.maxWeightLb
         Column(
             Modifier
                 .height(72.dp)
                 .padding(start = 10.dp),
-            verticalArrangement = if (flat) Arrangement.Center else Arrangement.SpaceBetween,
+            verticalArrangement = if (chart.isFlat) Arrangement.Center else Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.End,
         ) {
             Text(formatWeightLb(chart.maxWeightLb), color = Palette.Muted, fontSize = 11.sp)
-            if (!flat) {
+            if (!chart.isFlat) {
                 Text(formatWeightLb(chart.minWeightLb), color = Palette.Muted, fontSize = 11.sp)
             }
         }
     }
     Spacer(Modifier.height(6.dp))
-    val dateFormat = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
+    val dateFormat = remember(locale) {
+        DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
+    }
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(chart.firstDate.format(dateFormat), color = Palette.Muted, fontSize = 11.sp)
-        if (chart.lastDate != chart.firstDate) {
+        if (chart.spansMultipleDays) {
             Text(chart.lastDate.format(dateFormat), color = Palette.Muted, fontSize = 11.sp)
         }
     }
@@ -343,33 +344,41 @@ private fun WeightSection(chart: WeightChart, locale: Locale) {
 @Composable
 private fun WeightChartCanvas(chart: WeightChart, modifier: Modifier = Modifier) {
     val description = "Weight progression from " +
-        "${formatWeightLb(chart.points.first().weightLb)} to " +
+        "${formatWeightLb(chart.earliestWeightLb)} to " +
         formatWeightLb(chart.latestWeightLb)
-    Canvas(modifier.semantics { contentDescription = description }) {
-        // Keeps dots and line caps from clipping at the chart's extremes.
-        val inset = 5.dp.toPx()
-        fun position(point: WeightChartPoint) = Offset(
-            x = inset + (size.width - 2 * inset) * point.xFraction,
-            y = inset + (size.height - 2 * inset) * (1f - point.yFraction),
-        )
-        val positions = chart.points.map(::position)
-        if (positions.size > 1) {
-            val path = Path().apply {
-                moveTo(positions.first().x, positions.first().y)
-                positions.drop(1).forEach { lineTo(it.x, it.y) }
-            }
-            drawPath(
-                path,
-                color = Palette.Accent,
-                style = Stroke(
+    Spacer(
+        modifier
+            .semantics { contentDescription = description }
+            // Geometry depends only on the chart and the canvas size, so it is
+            // cached rather than rebuilt on every scroll frame of the dialog.
+            .drawWithCache {
+                // Keeps dots and line caps from clipping at the chart's extremes.
+                val inset = 5.dp.toPx()
+                val positions = chart.points.map { point ->
+                    Offset(
+                        x = inset + (size.width - 2 * inset) * point.xFraction,
+                        y = inset + (size.height - 2 * inset) * (1f - point.yFraction),
+                    )
+                }
+                // A single point strokes nothing; its dot below still draws.
+                val path = Path().apply {
+                    moveTo(positions.first().x, positions.first().y)
+                    for (index in 1 until positions.size) {
+                        lineTo(positions[index].x, positions[index].y)
+                    }
+                }
+                val stroke = Stroke(
                     width = 2.dp.toPx(),
                     cap = StrokeCap.Round,
                     join = StrokeJoin.Round,
-                ),
-            )
-        }
-        positions.forEach { drawCircle(Palette.Accent, radius = 3.dp.toPx(), center = it) }
-    }
+                )
+                val dotRadius = 3.dp.toPx()
+                onDrawBehind {
+                    drawPath(path, color = Palette.Accent, style = stroke)
+                    positions.forEach { drawCircle(Palette.Accent, radius = dotRadius, center = it) }
+                }
+            },
+    )
 }
 
 @Composable

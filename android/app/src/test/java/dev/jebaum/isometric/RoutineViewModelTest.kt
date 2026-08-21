@@ -37,13 +37,14 @@ private class Recorder : CuePlayer {
 }
 
 private class History(initial: List<Long> = emptyList()) : CompletionHistoryStore {
-    val entries = initial.toMutableList()
-    val weighted = mutableListOf<WeightedCompletion>()
+    val completions = initial.map { WeightedCompletion(it, 0.0) }.toMutableList()
     var closes = 0
 
+    /** Derived, so the two views of the log cannot fall out of sync. */
+    val entries: List<Long> get() = completions.map { it.completedAtMillis }
+
     override fun record(completedAtMillis: Long, weightLb: Double) {
-        entries += completedAtMillis
-        weighted += WeightedCompletion(completedAtMillis, weightLb)
+        completions += WeightedCompletion(completedAtMillis, weightLb)
     }
 
     override fun latest(): Long? = entries.maxOrNull()
@@ -52,7 +53,7 @@ private class History(initial: List<Long> = emptyList()) : CompletionHistoryStor
         entries.filter { it in startInclusiveMillis until endExclusiveMillis }.sorted()
 
     override fun weightHistory(): List<WeightedCompletion> =
-        weighted.sortedBy { it.completedAtMillis }
+        completions.sortedBy { it.completedAtMillis }
 
     override fun close() {
         closes++
@@ -367,7 +368,7 @@ class RoutineViewModelTest {
         val m = RoutineViewModel(store, player, { time })
         m.updateWeight(10.0)
 
-        for (bad in listOf(-0.5, RoutineViewModel.MAX_WEIGHT_LB + 0.01)) {
+        for (bad in listOf(-0.5, MAX_WEIGHT_LB + 0.01)) {
             val thrown = runCatching { m.updateWeight(bad) }.exceptionOrNull()
             assertTrue(
                 "expected IllegalArgumentException for $bad, got $thrown",

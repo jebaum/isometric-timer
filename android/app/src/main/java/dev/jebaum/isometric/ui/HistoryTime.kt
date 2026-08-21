@@ -19,10 +19,13 @@ internal fun dayRange(day: LocalDate, zone: ZoneId): EpochMillisRange = EpochMil
 )
 
 /** UTC timestamps are assigned to dates only at the display boundary. */
+internal fun localDateOf(epochMillis: Long, zone: ZoneId): LocalDate =
+    Instant.ofEpochMilli(epochMillis).atZone(zone).toLocalDate()
+
 internal fun completionCountsByDate(
     completionTimestamps: List<Long>,
     zone: ZoneId,
 ): Map<LocalDate, Int> = completionTimestamps
-    .map { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+    .map { localDateOf(it, zone) }
     .groupingBy { it }
     .eachCount()

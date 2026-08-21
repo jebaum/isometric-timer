@@ -12,18 +12,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,12 +28,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -198,40 +191,14 @@ private fun NumberField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     last: Boolean = false,
-) {
-    // Read here rather than passed in: threading a CompositionLocal through a
-    // parameter defeats its purpose and makes the composable unskippable.
-    val focusManager = LocalFocusManager.current
-    OutlinedTextField(
-        value = value,
-        onValueChange = { entry -> onValueChange(entry.filter { it.isDigit() }.take(4)) },
-        // The label slot associates the text with the field for accessibility,
-        // which a sibling Text does not.
-        label = { Text(label) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Number,
-            imeAction = if (last) ImeAction.Done else ImeAction.Next,
-        ),
-        keyboardActions = KeyboardActions(
-            onNext = { focusManager.moveFocus(FocusDirection.Next) },
-            onDone = { focusManager.clearFocus() },
-        ),
-        shape = RoundedCornerShape(12.dp),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = Palette.Surface,
-            unfocusedContainerColor = Palette.Surface,
-            focusedTextColor = Palette.Text,
-            unfocusedTextColor = Palette.Text,
-            focusedLabelColor = Palette.Accent,
-            unfocusedLabelColor = Palette.Muted,
-            focusedIndicatorColor = Palette.Accent,
-            unfocusedIndicatorColor = Palette.Border,
-            cursorColor = Palette.Accent,
-        ),
-        modifier = modifier,
-    )
-}
+) = EntryField(
+    label = label,
+    value = value,
+    onValueChange = { entry -> onValueChange(entry.filter { it.isDigit() }.take(4)) },
+    keyboardType = KeyboardType.Number,
+    modifier = modifier,
+    last = last,
+)
 
 /** Returns null when the entries do not form a routine the timer will accept. */
 private fun parse(cycles: String, hold: String, switch: String, rest: String): Settings? {

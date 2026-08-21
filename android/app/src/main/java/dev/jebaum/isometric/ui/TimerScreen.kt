@@ -138,12 +138,15 @@ fun TimerScreen(viewModel: RoutineViewModel) {
         }
     }
 
+    // Remembered: TimerScreen recomposes every second while running, but the
+    // weight only changes when its dialog saves.
+    val weight = remember(viewModel.weightLb) { formatWeightLb(viewModel.weightLb) }
+
     TimerContent(
         snapshot = viewModel.snapshot,
         progress = { viewModel.progress },
-        settingsEnabled = !active,
-        weight = formatWeightLb(viewModel.weightLb),
-        weightEnabled = !active,
+        idle = !active,
+        weight = weight,
         onWeight = { weightOpen = true },
         historyMessage = if (active) null else historyMessage,
         onToggle = {
@@ -234,9 +237,9 @@ private fun TimerContent(
     snapshot: Snapshot,
     /** A lambda so the per-frame value is read during draw, not composition. */
     progress: () -> Float,
-    settingsEnabled: Boolean,
+    /** No routine in progress; gates both the settings button and the weight cell. */
+    idle: Boolean,
     weight: String,
-    weightEnabled: Boolean,
     onWeight: () -> Unit,
     historyMessage: String?,
     onToggle: () -> Unit,
@@ -269,7 +272,7 @@ private fun TimerContent(
         ) {
             TopBar(
                 accent = accent,
-                settingsEnabled = settingsEnabled,
+                settingsEnabled = idle,
                 onHistory = onHistory,
                 onSettings = onSettings,
             )
@@ -292,7 +295,7 @@ private fun TimerContent(
                         countdownColor = if (snapshot.warning) Palette.Warning else accent,
                         availableHeight = available,
                         weight = weight,
-                        weightEnabled = weightEnabled,
+                        weightEnabled = idle,
                         onWeight = onWeight,
                         historyMessage = historyMessage,
                         onToggle = onToggle,
@@ -543,19 +546,35 @@ private fun MetaRow(
         MetaDivider()
         MetaCell("CYCLE", cycle, accent, Modifier.weight(1f))
         MetaDivider()
-        MetaCell(
-            "WEIGHT",
-            weight,
-            accent,
-            Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(10.dp))
-                // Enabled only while idle, mirroring the settings button, so
-                // the recorded weight cannot change mid-session.
-                .clickable(enabled = weightEnabled, onClick = onWeight)
-                .semantics { contentDescription = "Hold weight $weight" },
-        )
+        WeightCell(weight, weightEnabled, onWeight, accent, Modifier.weight(1f))
     }
+}
+
+private val WeightCellShape = RoundedCornerShape(10.dp)
+
+/**
+ * Its own composable so the second-by-second recomposition of [MetaRow] skips
+ * it — none of its inputs change while a routine runs.
+ */
+@Composable
+private fun WeightCell(
+    weight: String,
+    enabled: Boolean,
+    onWeight: () -> Unit,
+    accent: Color,
+    modifier: Modifier = Modifier,
+) {
+    MetaCell(
+        "WEIGHT",
+        weight,
+        accent,
+        modifier
+            .clip(WeightCellShape)
+            // Enabled only while idle, mirroring the settings button, so the
+            // recorded weight cannot change mid-session.
+            .clickable(enabled = enabled, onClick = onWeight)
+            .semantics { contentDescription = "Hold weight $weight" },
+    )
 }
 
 @Composable
@@ -693,9 +712,8 @@ private fun PreviewFrame(snapshot: Snapshot, progress: Float) {
         TimerContent(
             snapshot = snapshot,
             progress = { progress },
-            settingsEnabled = !snapshot.started || snapshot.done,
+            idle = !snapshot.started || snapshot.done,
             weight = "12.5 lb",
-            weightEnabled = !snapshot.started || snapshot.done,
             onWeight = {},
             historyMessage = if (snapshot.started && !snapshot.done) {
                 null

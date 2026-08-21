@@ -5,7 +5,9 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WeightProgressionTest {
@@ -67,6 +69,10 @@ class WeightProgressionTest {
         assertEquals(LocalDate.of(2026, 8, 5), chart.lastDate)
         assertEquals(10.0, chart.minWeightLb, 0.0)
         assertEquals(14.0, chart.maxWeightLb, 0.0)
+        assertEquals(10.0, chart.earliestWeightLb, 0.0)
+        assertEquals(14.0, chart.latestWeightLb, 0.0)
+        assertFalse(chart.isFlat)
+        assertTrue(chart.spansMultipleDays)
 
         val (first, middle, last) = chart.points
         assertEquals(0.0f, first.xFraction, 1e-6f)
@@ -85,6 +91,7 @@ class WeightProgressionTest {
         )!!
         assertEquals(0.5f, single.points.single().xFraction, 0f)
         assertEquals(0.5f, single.points.single().yFraction, 0f)
+        assertFalse(single.spansMultipleDays)
 
         val flat = weightChart(
             listOf(
@@ -96,6 +103,7 @@ class WeightProgressionTest {
         assertEquals(listOf(0.5f, 0.5f), flat.points.map { it.yFraction })
         assertEquals(12.5, flat.minWeightLb, 0.0)
         assertEquals(12.5, flat.maxWeightLb, 0.0)
+        assertTrue(flat.isFlat)
     }
 
     @Test

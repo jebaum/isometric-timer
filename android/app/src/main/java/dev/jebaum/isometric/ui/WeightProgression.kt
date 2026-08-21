@@ -1,7 +1,6 @@
 package dev.jebaum.isometric.ui
 
 import dev.jebaum.isometric.WeightedCompletion
-import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
@@ -15,14 +14,16 @@ internal data class WeightChartPoint(
     val weightLb: Double,
 )
 
-internal data class WeightChart(
-    val points: List<WeightChartPoint>,
-    val minWeightLb: Double,
-    val maxWeightLb: Double,
-    val firstDate: LocalDate,
-    val lastDate: LocalDate,
-) {
+/** Everything the weight section renders, derived from the ordered [points]. */
+internal data class WeightChart(val points: List<WeightChartPoint>) {
+    val minWeightLb: Double get() = points.minOf { it.weightLb }
+    val maxWeightLb: Double get() = points.maxOf { it.weightLb }
+    val firstDate: LocalDate get() = points.first().date
+    val lastDate: LocalDate get() = points.last().date
+    val earliestWeightLb: Double get() = points.first().weightLb
     val latestWeightLb: Double get() = points.last().weightLb
+    val isFlat: Boolean get() = minWeightLb == maxWeightLb
+    val spansMultipleDays: Boolean get() = firstDate != lastDate
 }
 
 /**
@@ -33,25 +34,19 @@ internal fun weightChart(history: List<WeightedCompletion>, zone: ZoneId): Weigh
     if (history.isEmpty()) return null
 
     // associate keeps the last value per key, so ascending order makes each
-    // day's final completion win.
+    // day's final completion win — and leaves the keys in date order.
     val weightByDay = history
         .sortedBy { it.completedAtMillis }
-        .associate { completion ->
-            val date = Instant.ofEpochMilli(completion.completedAtMillis)
-                .atZone(zone)
-                .toLocalDate()
-            date to completion.weightLb
-        }
+        .associate { localDateOf(it.completedAtMillis, zone) to it.weightLb }
 
-    val dates = weightByDay.keys.sorted()
-    val first = dates.first()
-    val last = dates.last()
+    val first = weightByDay.keys.first()
+    val last = weightByDay.keys.last()
     val min = weightByDay.values.min()
     val max = weightByDay.values.max()
     val daySpan = ChronoUnit.DAYS.between(first, last).toFloat()
     val weightSpan = max - min
 
-    val points = dates.map { date ->
+    val points = weightByDay.map { (date, weightLb) ->
         WeightChartPoint(
             xFraction = if (daySpan == 0f) {
                 0.5f
@@ -61,11 +56,11 @@ internal fun weightChart(history: List<WeightedCompletion>, zone: ZoneId): Weigh
             yFraction = if (weightSpan == 0.0) {
                 0.5f
             } else {
-                ((weightByDay.getValue(date) - min) / weightSpan).toFloat()
+                ((weightLb - min) / weightSpan).toFloat()
             },
             date = date,
-            weightLb = weightByDay.getValue(date),
+            weightLb = weightLb,
         )
     }
-    return WeightChart(points, min, max, first, last)
+    return WeightChart(points)
 }

@@ -5,7 +5,6 @@ import androidx.core.content.edit
 import dev.jebaum.isometric.timer.DEFAULT_SETTINGS
 import dev.jebaum.isometric.timer.Settings
 import dev.jebaum.isometric.timer.isValid
-import kotlin.math.roundToInt
 
 /** Kept as an interface so the routine can be unit-tested against a fake. */
 interface SettingsStore {
@@ -52,10 +51,13 @@ class PreferencesSettingsStore(context: Context) : SettingsStore {
 
     override var weightLb: Double
         // Stored as hundredths of a pound: SharedPreferences has no double, and
-        // a float round-trip would smear 12.1 into 12.100000381.
-        get() = preferences.getInt(KEY_WEIGHT_LB_HUNDREDTHS, 0) / 100.0
+        // a float round-trip would smear 12.1 into 12.100000381. Corrupted
+        // values fall back like load() does, so an out-of-range weight can
+        // never reach state the weight dialog cannot re-edit.
+        get() = (preferences.getInt(KEY_WEIGHT_LB_HUNDREDTHS, 0) / 100.0)
+            .takeIf { isValidWeightLb(it) } ?: 0.0
         set(value) = preferences.edit {
-            putInt(KEY_WEIGHT_LB_HUNDREDTHS, (value * 100).roundToInt())
+            putInt(KEY_WEIGHT_LB_HUNDREDTHS, weightLbHundredths(value))
         }
 
     private companion object {

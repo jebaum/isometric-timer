@@ -13,6 +13,8 @@ interface CompletionHistoryStore {
     fun record(completedAtMillis: Long, weightLb: Double)
     fun latest(): Long?
     fun between(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long>
+
+    /** Every completion with its weight, oldest first. */
     fun weightHistory(): List<WeightedCompletion>
     fun close() = Unit
 }
@@ -36,12 +38,15 @@ class SQLiteCompletionHistoryStore(context: Context) :
     CompletionHistoryStore {
 
     override fun onCreate(database: SQLiteDatabase) {
+        // Creates the v1 table and climbs the same ladder an installed device
+        // does, so a column is only ever defined in one place and fresh and
+        // upgraded schemas cannot drift.
         database.execSQL(
             "CREATE TABLE $TABLE_COMPLETIONS (" +
-                "$COLUMN_COMPLETED_AT INTEGER NOT NULL PRIMARY KEY, " +
-                "$COLUMN_WEIGHT_LB REAL NOT NULL DEFAULT 0" +
+                "$COLUMN_COMPLETED_AT INTEGER NOT NULL PRIMARY KEY" +
                 ")",
         )
+        onUpgrade(database, 1, DATABASE_VERSION)
     }
 
     override fun onUpgrade(database: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -83,26 +88,24 @@ class SQLiteCompletionHistoryStore(context: Context) :
 
     override fun between(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long> {
         require(startInclusiveMillis <= endExclusiveMillis) { "history range is reversed" }
-        return readableDatabase.query(
-            TABLE_COMPLETIONS,
-            arrayOf(COLUMN_COMPLETED_AT),
-            "$COLUMN_COMPLETED_AT >= ? AND $COLUMN_COMPLETED_AT < ?",
-            arrayOf(startInclusiveMillis.toString(), endExclusiveMillis.toString()),
-            null,
-            null,
-            "$COLUMN_COMPLETED_AT ASC",
-        ).use { cursor ->
-            buildList(cursor.count) {
-                while (cursor.moveToNext()) add(cursor.getLong(0))
-            }
-        }
+        return queryCompletions(
+            selection = "$COLUMN_COMPLETED_AT >= ? AND $COLUMN_COMPLETED_AT < ?",
+            selectionArgs = arrayOf(startInclusiveMillis.toString(), endExclusiveMillis.toString()),
+        ).map { it.completedAtMillis }
     }
 
-    override fun weightHistory(): List<WeightedCompletion> = readableDatabase.query(
+    override fun weightHistory(): List<WeightedCompletion> =
+        queryCompletions(selection = null, selectionArgs = null)
+
+    /** The one projection over the table, so its two readers cannot drift. */
+    private fun queryCompletions(
+        selection: String?,
+        selectionArgs: Array<String>?,
+    ): List<WeightedCompletion> = readableDatabase.query(
         TABLE_COMPLETIONS,
         arrayOf(COLUMN_COMPLETED_AT, COLUMN_WEIGHT_LB),
-        null,
-        null,
+        selection,
+        selectionArgs,
         null,
         null,
         "$COLUMN_COMPLETED_AT ASC",

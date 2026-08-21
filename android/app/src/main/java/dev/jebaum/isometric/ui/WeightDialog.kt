@@ -10,15 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,11 +22,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,7 +45,6 @@ fun WeightDialog(
     // discard what has been typed.
     var entry by rememberSaveable(initialLb) { mutableStateOf(weightNumberText(initialLb)) }
     val candidate = parseWeightLb(entry)
-    val focusManager = LocalFocusManager.current
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -86,28 +79,11 @@ fun WeightDialog(
 
                 Spacer(Modifier.height(16.dp))
 
-                OutlinedTextField(
+                EntryField(
+                    label = "Weight (lb)",
                     value = entry,
                     onValueChange = { if (isWeightEntry(it)) entry = it },
-                    label = { Text("Weight (lb)") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Decimal,
-                        imeAction = ImeAction.Done,
-                    ),
-                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Palette.Surface,
-                        unfocusedContainerColor = Palette.Surface,
-                        focusedTextColor = Palette.Text,
-                        unfocusedTextColor = Palette.Text,
-                        focusedLabelColor = Palette.Accent,
-                        unfocusedLabelColor = Palette.Muted,
-                        focusedIndicatorColor = Palette.Accent,
-                        unfocusedIndicatorColor = Palette.Border,
-                        cursorColor = Palette.Accent,
-                    ),
+                    keyboardType = KeyboardType.Decimal,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -120,21 +96,17 @@ fun WeightDialog(
 
                 Spacer(Modifier.height(20.dp))
 
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                Button(
+                    onClick = { candidate?.let(onSave) },
+                    enabled = candidate != null,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Palette.Accent,
+                        contentColor = Palette.OnAccent,
+                    ),
+                    modifier = Modifier.align(Alignment.End),
                 ) {
-                    Button(
-                        onClick = { candidate?.let(onSave) },
-                        enabled = candidate != null,
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Palette.Accent,
-                            contentColor = Palette.OnAccent,
-                        ),
-                    ) {
-                        Text("Save", fontWeight = FontWeight.Bold)
-                    }
+                    Text("Save", fontWeight = FontWeight.Bold)
                 }
             }
         }
