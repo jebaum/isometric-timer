@@ -5,20 +5,25 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
+/** A completed routine paired with the hold weight recorded for it. */
+data class WeightedCompletion(val completedAtMillis: Long, val weightLb: Double)
+
 /** Persistence boundary for completed routines. Timestamps are UTC Unix milliseconds. */
 interface CompletionHistoryStore {
-    fun record(completedAtMillis: Long)
+    fun record(completedAtMillis: Long, weightLb: Double)
     fun latest(): Long?
     fun between(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long>
+    fun weightHistory(): List<WeightedCompletion>
     fun close() = Unit
 }
 
 /** Keeps callers that do not need history, particularly timer tests, lightweight. */
 object EmptyCompletionHistoryStore : CompletionHistoryStore {
-    override fun record(completedAtMillis: Long) = Unit
+    override fun record(completedAtMillis: Long, weightLb: Double) = Unit
     override fun latest(): Long? = null
     override fun between(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long> =
         emptyList()
+    override fun weightHistory(): List<WeightedCompletion> = emptyList()
 }
 
 /**
@@ -33,16 +38,32 @@ class SQLiteCompletionHistoryStore(context: Context) :
     override fun onCreate(database: SQLiteDatabase) {
         database.execSQL(
             "CREATE TABLE $TABLE_COMPLETIONS (" +
-                "$COLUMN_COMPLETED_AT INTEGER NOT NULL PRIMARY KEY" +
+                "$COLUMN_COMPLETED_AT INTEGER NOT NULL PRIMARY KEY, " +
+                "$COLUMN_WEIGHT_LB REAL NOT NULL DEFAULT 0" +
                 ")",
         )
     }
 
-    override fun onUpgrade(database: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(database: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        var version = oldVersion
+        while (version < newVersion) {
+            when (version) {
+                // Completions predate weight tracking; the default of 0 records
+                // them as bodyweight-only, which is what they were.
+                1 -> database.execSQL(
+                    "ALTER TABLE $TABLE_COMPLETIONS " +
+                        "ADD COLUMN $COLUMN_WEIGHT_LB REAL NOT NULL DEFAULT 0",
+                )
+                else -> error("no migration from database version $version")
+            }
+            version++
+        }
+    }
 
-    override fun record(completedAtMillis: Long) {
-        val values = ContentValues(1).apply {
+    override fun record(completedAtMillis: Long, weightLb: Double) {
+        val values = ContentValues(2).apply {
             put(COLUMN_COMPLETED_AT, completedAtMillis)
+            put(COLUMN_WEIGHT_LB, weightLb)
         }
         writableDatabase.insertOrThrow(TABLE_COMPLETIONS, null, values)
     }
@@ -77,12 +98,31 @@ class SQLiteCompletionHistoryStore(context: Context) :
         }
     }
 
+    override fun weightHistory(): List<WeightedCompletion> = readableDatabase.query(
+        TABLE_COMPLETIONS,
+        arrayOf(COLUMN_COMPLETED_AT, COLUMN_WEIGHT_LB),
+        null,
+        null,
+        null,
+        null,
+        "$COLUMN_COMPLETED_AT ASC",
+    ).use { cursor ->
+        buildList(cursor.count) {
+            while (cursor.moveToNext()) {
+                add(WeightedCompletion(cursor.getLong(0), cursor.getDouble(1)))
+            }
+        }
+    }
+
     override fun close() = super<SQLiteOpenHelper>.close()
 
     private companion object {
         const val DATABASE_NAME = "routine-history.db"
-        const val DATABASE_VERSION = 1
+
+        // Installed release data must be migrated in onUpgrade, never dropped.
+        const val DATABASE_VERSION = 2
         const val TABLE_COMPLETIONS = "completions"
         const val COLUMN_COMPLETED_AT = "completed_at"
+        const val COLUMN_WEIGHT_LB = "weight_lb"
     }
 }

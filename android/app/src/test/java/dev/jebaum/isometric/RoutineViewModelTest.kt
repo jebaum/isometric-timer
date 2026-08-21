@@ -16,6 +16,7 @@ import org.junit.Test
 private class Store(
     private var settings: Settings,
     override var cuesEnabled: Boolean = true,
+    override var weightLb: Double = 0.0,
 ) : SettingsStore {
     override fun load(): Settings = settings
     override fun save(settings: Settings) {
@@ -37,16 +38,21 @@ private class Recorder : CuePlayer {
 
 private class History(initial: List<Long> = emptyList()) : CompletionHistoryStore {
     val entries = initial.toMutableList()
+    val weighted = mutableListOf<WeightedCompletion>()
     var closes = 0
 
-    override fun record(completedAtMillis: Long) {
+    override fun record(completedAtMillis: Long, weightLb: Double) {
         entries += completedAtMillis
+        weighted += WeightedCompletion(completedAtMillis, weightLb)
     }
 
     override fun latest(): Long? = entries.maxOrNull()
 
     override fun between(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long> =
         entries.filter { it in startInclusiveMillis until endExclusiveMillis }.sorted()
+
+    override fun weightHistory(): List<WeightedCompletion> =
+        weighted.sortedBy { it.completedAtMillis }
 
     override fun close() {
         closes++
@@ -308,6 +314,69 @@ class RoutineViewModelTest {
 
         eastCoastNow = eligibleAt
         assertNull(m.spacingWarningAt())
+    }
+
+    // ---- weight ------------------------------------------------------------
+
+    @Test
+    fun `completion records the weight in effect`() {
+        val history = History()
+        val completedAt = 1_700_000_000_000L
+        val m = model(
+            settings = Settings(cycles = 1, hold = 2, switch = 0, rest = 0),
+            history = history,
+            wallNow = { completedAt },
+        )
+
+        m.updateWeight(12.5)
+        m.toggle()
+        run(m, 6.0)
+
+        assertEquals(listOf(WeightedCompletion(completedAt, 12.5)), history.weightHistory())
+    }
+
+    @Test
+    fun `weight defaults to bodyweight zero and persists through the store`() {
+        val store = Store(Settings(2, 5, 2, 4))
+        val m = RoutineViewModel(store, player, { time })
+
+        assertEquals(0.0, m.weightLb, 0.0)
+
+        m.updateWeight(17.25)
+
+        assertEquals(17.25, m.weightLb, 0.0)
+        assertEquals(17.25, store.weightLb, 0.0)
+    }
+
+    @Test
+    fun `updating the weight does not disturb an active routine`() {
+        val m = model()
+        m.toggle()
+        run(m, 2.0)
+        val before = m.snapshot
+
+        m.updateWeight(20.0)
+
+        assertEquals("the weight change touched the routine", before, m.snapshot)
+        assertTrue(m.running)
+    }
+
+    @Test
+    fun `updateWeight rejects values outside the accepted range without persisting`() {
+        val store = Store(Settings(2, 5, 2, 4))
+        val m = RoutineViewModel(store, player, { time })
+        m.updateWeight(10.0)
+
+        for (bad in listOf(-0.5, RoutineViewModel.MAX_WEIGHT_LB + 0.01)) {
+            val thrown = runCatching { m.updateWeight(bad) }.exceptionOrNull()
+            assertTrue(
+                "expected IllegalArgumentException for $bad, got $thrown",
+                thrown is IllegalArgumentException,
+            )
+        }
+
+        assertEquals(10.0, m.weightLb, 0.0)
+        assertEquals(10.0, store.weightLb, 0.0)
     }
 
     // ---- settings contract -------------------------------------------------

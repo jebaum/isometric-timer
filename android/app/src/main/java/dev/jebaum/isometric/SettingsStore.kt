@@ -5,12 +5,16 @@ import androidx.core.content.edit
 import dev.jebaum.isometric.timer.DEFAULT_SETTINGS
 import dev.jebaum.isometric.timer.Settings
 import dev.jebaum.isometric.timer.isValid
+import kotlin.math.roundToInt
 
 /** Kept as an interface so the routine can be unit-tested against a fake. */
 interface SettingsStore {
     fun load(): Settings
     fun save(settings: Settings)
     var cuesEnabled: Boolean
+
+    /** Hold weight in pounds; 0 means bodyweight only. */
+    var weightLb: Double
 }
 
 /**
@@ -46,11 +50,20 @@ class PreferencesSettingsStore(context: Context) : SettingsStore {
         get() = preferences.getBoolean(KEY_CUES, true)
         set(value) = preferences.edit { putBoolean(KEY_CUES, value) }
 
+    override var weightLb: Double
+        // Stored as hundredths of a pound: SharedPreferences has no double, and
+        // a float round-trip would smear 12.1 into 12.100000381.
+        get() = preferences.getInt(KEY_WEIGHT_LB_HUNDREDTHS, 0) / 100.0
+        set(value) = preferences.edit {
+            putInt(KEY_WEIGHT_LB_HUNDREDTHS, (value * 100).roundToInt())
+        }
+
     private companion object {
         const val KEY_CYCLES = "cycles"
         const val KEY_HOLD = "hold"
         const val KEY_SWITCH = "switch"
         const val KEY_REST = "rest"
         const val KEY_CUES = "cues"
+        const val KEY_WEIGHT_LB_HUNDREDTHS = "weightLbHundredths"
     }
 }

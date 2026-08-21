@@ -1,6 +1,7 @@
 package dev.jebaum.isometric
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -13,6 +14,7 @@ import dev.jebaum.isometric.timer.Settings
 import dev.jebaum.isometric.timer.Snapshot
 import dev.jebaum.isometric.timer.buildSchedule
 import dev.jebaum.isometric.timer.isValid
+import kotlin.math.round
 
 /**
  * Holds the routine across configuration changes, so a rotation mid-hold does
@@ -59,6 +61,10 @@ class RoutineViewModel(
         private set
 
     var cuesEnabled: Boolean by mutableStateOf(store.cuesEnabled)
+        private set
+
+    /** Hold weight in pounds; 0 means bodyweight only. */
+    var weightLb: Double by mutableDoubleStateOf(store.weightLb)
         private set
 
     var lastCompletionAt: Long? by mutableStateOf(history.latest())
@@ -140,7 +146,7 @@ class RoutineViewModel(
     /** A storage failure must not stop the frame loop at the finish line. */
     private fun rememberCompletion() {
         val completedAt = wallNow()
-        runCatching { history.record(completedAt) }.onSuccess {
+        runCatching { history.record(completedAt, weightLb) }.onSuccess {
             lastCompletionAt = completedAt
             historyVersion++
         }
@@ -190,6 +196,21 @@ class RoutineViewModel(
         if (enabled) cueState = CueState.syncedTo(snapshot)
     }
 
+    /**
+     * Unlike [updateSettings] this must not reset the routine: the weight does
+     * not change the schedule, only what a completion records.
+     */
+    fun updateWeight(valueLb: Double) {
+        require(valueLb in 0.0..MAX_WEIGHT_LB) { "weight outside the accepted range: $valueLb" }
+        // Two decimals is the finest the entry field accepts; rounding here
+        // keeps arithmetic artifacts out of storage.
+        val rounded = round(valueLb * 100) / 100.0
+        weightLb = rounded
+        store.weightLb = rounded
+    }
+
+    fun weightHistory(): List<WeightedCompletion> = history.weightHistory()
+
     fun completionsBetween(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long> =
         history.between(startInclusiveMillis, endExclusiveMillis)
 
@@ -207,5 +228,6 @@ class RoutineViewModel(
 
     companion object {
         const val MINIMUM_COMPLETION_GAP_MILLIS = 8L * 60L * 60L * 1_000L
+        const val MAX_WEIGHT_LB = 500.0
     }
 }

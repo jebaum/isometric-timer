@@ -11,6 +11,7 @@ import org.junit.Test
 private class FakeSettingsStore(
     private var settings: Settings,
     override var cuesEnabled: Boolean = true,
+    override var weightLb: Double = 0.0,
 ) : SettingsStore {
     override fun load(): Settings = settings
     override fun save(settings: Settings) {
