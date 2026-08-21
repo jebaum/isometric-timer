@@ -32,6 +32,14 @@ object EmptyCompletionHistoryStore : CompletionHistoryStore {
  * One row per completed routine. SQLite is already part of Android, makes each
  * completion an append rather than a rewrite of all history, and can answer a
  * calendar-month query without loading unrelated years.
+ *
+ * Queries run synchronously, including from `remember` blocks during
+ * composition, and that is deliberate: they execute only when a dialog opens,
+ * the month changes, or a completion lands — never per frame — and a routine
+ * logged a few times a day keeps this table in the low thousands of rows for
+ * years, where an indexed range query costs well under a frame. Move loading
+ * to a background dispatcher only if the calendar visibly hitches on a real
+ * device or history's growth outpaces this arithmetic.
  */
 class SQLiteCompletionHistoryStore(context: Context) :
     SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, null, DATABASE_VERSION),
