@@ -469,7 +469,8 @@ private fun NextPhase(next: String, accent: Color) {
     }
 }
 
-private fun stateLabel(status: RoutineStatus) = when (status) {
+/** What the state pill calls each status. Internal so a JVM test can pin it. */
+internal fun stateLabel(status: RoutineStatus) = when (status) {
     RoutineStatus.READY -> "READY"
     RoutineStatus.RUNNING -> "IN PROGRESS"
     RoutineStatus.PAUSED -> "PAUSED"
@@ -492,8 +493,11 @@ internal val PhaseId.label: String
 /** Shown where a phase name would be once there is no phase left to name. */
 internal const val NOTHING_LEFT = "DONE"
 
-/** What the primary button does next, which is one thing per status. */
-private fun startLabel(status: RoutineStatus) = when (status) {
+/**
+ * What the primary button does next, which is one thing per status. Internal
+ * so a JVM test can pin it.
+ */
+internal fun startLabel(status: RoutineStatus) = when (status) {
     RoutineStatus.READY -> "Start"
     RoutineStatus.RUNNING -> "Pause"
     RoutineStatus.PAUSED -> "Resume"
