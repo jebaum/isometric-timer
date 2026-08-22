@@ -8,14 +8,14 @@ looking at the screen.
 <table>
 <tr>
 <td width="25%"><img src="docs/screenshots/ready.png" width="100%" alt="Ready screen: the RIGHT SIDE phase at 35 seconds, a Start button, and today's routine count"></td>
-<td width="25%"><img src="docs/screenshots/hold.png" width="100%" alt="A hold in progress: 21 seconds left, the phase track part-filled, SWITCH queued next"></td>
-<td width="25%"><img src="docs/screenshots/rest.png" width="100%" alt="A rest phase: 82 seconds left, the accent colour drained to grey"></td>
-<td width="25%"><img src="docs/screenshots/calendar.png" width="100%" alt="The routine calendar: a month of completions, one mark per routine, above the hold-weight chart"></td>
+<td width="25%"><img src="docs/screenshots/gap.png" width="100%" alt="A dialog reading Less than 8 hours, offering Wait or Start anyway"></td>
+<td width="25%"><img src="docs/screenshots/hold.png" width="100%" alt="A hold in progress: 23 seconds left, the phase track part-filled, SWITCH queued next"></td>
+<td width="25%"><img src="docs/screenshots/calendar.png" width="100%" alt="The routine calendar: a month of completions, one mark per routine, above six months of hold-weight progression"></td>
 </tr>
 <tr>
 <td align="center"><sub><b>Ready</b><br>Waiting to start</sub></td>
+<td align="center"><sub><b>Too soon</b><br>The gap is advice, not a lock</sub></td>
 <td align="center"><sub><b>Holding</b><br>The screen you don't look at</sub></td>
-<td align="center"><sub><b>Rest</b><br>Colour drains out</sub></td>
 <td align="center"><sub><b>History</b><br>Completions and weight</sub></td>
 </tr>
 </table>
