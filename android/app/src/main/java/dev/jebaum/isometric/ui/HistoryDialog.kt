@@ -300,6 +300,14 @@ private fun WeightSection(chart: WeightChart, locale: Locale) {
     }
 }
 
+/**
+ * Dot spacing is the plot width divided by the charted-day count, so the 3dp
+ * dots crowd as history grows. Measured on a 1080px-wide screen: 50 dots touch
+ * but still read as separate sessions, 80 are fusing, and 131 are a solid band.
+ * Past this many the dots are dropped and only the trend line is stroked.
+ */
+private const val MAX_DOT_POINTS = 50
+
 @Composable
 private fun WeightChartCanvas(chart: WeightChart, modifier: Modifier = Modifier) {
     val description = "Weight progression from " +
@@ -332,9 +340,14 @@ private fun WeightChartCanvas(chart: WeightChart, modifier: Modifier = Modifier)
                     join = StrokeJoin.Round,
                 )
                 val dotRadius = 3.dp.toPx()
+                val drawsDots = positions.size <= MAX_DOT_POINTS
                 onDrawBehind {
                     drawPath(path, color = Palette.Accent, style = stroke)
-                    positions.forEach { drawCircle(Palette.Accent, radius = dotRadius, center = it) }
+                    if (drawsDots) {
+                        positions.forEach {
+                            drawCircle(Palette.Accent, radius = dotRadius, center = it)
+                        }
+                    }
                 }
             },
     )

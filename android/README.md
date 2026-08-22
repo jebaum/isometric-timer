@@ -66,6 +66,21 @@ Finishing a routine appends its Unix timestamp to the local SQLite
 `completions` table. Ending an unfinished routine does not count. The calendar
 button shows one mark for one completion that day and two marks for two or more.
 
+Below the calendar the dialog charts hold weight over the whole log. Every
+completion row also stores the weight in effect, and the chart plots one point
+per local day carrying that day's last recorded weight; bodyweight (`0 lb`) is
+a measurement like any other, so only an empty history has no chart. The labels
+around it are the earliest and latest dates and the heaviest and lightest
+weights, which is why the line itself needs no axes.
+
+Past 50 charted days the per-day dots stop resolving. Dot spacing is the plot
+width divided by the charted-day count, and on a 1080px-wide screen the dots
+touch at 50 days, fuse by 80, and are a solid band at 131. Beyond that
+threshold the dots are dropped and only the trend line is stroked, which drops
+marks that had already stopped carrying information while keeping the full
+span. Windowing to a trailing period or aggregating into weekly points would
+instead lose the long-term arc that is the reason the chart exists.
+
 After a completion, the ready screen shows when the recommended eight-hour gap
 ends. Starting sooner opens a warning with the choice to wait or start anyway;
 the interval is advisory rather than a hard lock. The routine itself continues
