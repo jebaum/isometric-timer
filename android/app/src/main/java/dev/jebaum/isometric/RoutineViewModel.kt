@@ -26,8 +26,9 @@ import dev.jebaum.isometric.timer.underway
  * backgrounded, or force-stopped, takes the active routine with it, and the app
  * reopens on a fresh READY screen with no completion row and nothing to explain
  * where the routine went. The window for that is narrow rather than closed:
- * `TimerScreen` holds the screen awake for as long as a routine is active,
- * which keeps the app foreground and visible for the whole of it. Settings and
+ * `TimerScreen` keeps the display from sleeping for as long as a routine is
+ * active, so the app never drifts into the background on its own — but that
+ * cannot stop Home or the lock button from sending it there. Settings and
  * completion history are a different matter — both are on disk and survive.
  *
  * Every dependency arrives through the constructor — including the clock — so

@@ -47,12 +47,13 @@ second:
 ./gradlew :app:testDebugUnitTest
 ```
 
-`RoutineViewModel` survives rotation and only rotation: no session state is
-persisted, so process death — reclaimed under memory pressure while
-backgrounded, or force-stopped — discards the active routine and reopens on a
-fresh READY screen with no completion row. That is deliberate, and the window is
-narrow because the screen is held awake for as long as a routine is active.
-Saved settings and completion history are on disk and are unaffected.
+`RoutineViewModel` survives configuration changes for as long as the process
+lives: no session state is persisted, so process death — reclaimed under memory
+pressure while backgrounded, or force-stopped — discards the active routine and
+reopens on a fresh READY screen with no completion row. That is deliberate, and
+the window is narrow because the display is kept from sleeping while a routine
+is active, so the app only ends up backgrounded by hand. Saved settings and
+completion history are on disk and are unaffected.
 
 `ui/TimerScreen.kt` splits into a stateful `TimerScreen` that owns the effects
 and a stateless `TimerContent`, so every routine state — ready, running, the
