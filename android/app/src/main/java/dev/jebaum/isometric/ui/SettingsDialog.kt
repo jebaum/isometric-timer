@@ -174,7 +174,7 @@ private fun NumberField(
 )
 
 /** Returns null when the entries do not form a routine the timer will accept. */
-private fun parse(
+internal fun parse(
     cycles: String,
     holdSeconds: String,
     switchSeconds: String,
@@ -189,7 +189,7 @@ private fun parse(
     return candidate.takeIf { it.isValid() }
 }
 
-private fun preview(candidate: Settings?): String {
+internal fun preview(candidate: Settings?): String {
     if (candidate == null) return "Enter valid whole-second durations"
     val noun = if (candidate.cycles == 1) "cycle" else "cycles"
     return "${candidate.cycles} $noun · ${formatDuration(candidate.totalSeconds())} total"
