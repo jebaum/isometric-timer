@@ -2,11 +2,22 @@ package dev.jebaum.isometric
 
 import dev.jebaum.isometric.timer.Settings
 
-/** Stands in for SharedPreferences, holding the saved value in memory. */
+/**
+ * Stands in for SharedPreferences, holding the saved value in memory.
+ *
+ * The two failure flags stand in for a disk that is gone or a preferences file
+ * that cannot be parsed. They live here rather than in separate failing stores
+ * so a test reads as "this store, but the read fails" — and so a store that
+ * refuses both halves is one object, not a pair that could disagree.
+ */
 internal class FakeSettingsStore(
     settings: Settings,
     cuesEnabled: Boolean = true,
     weightLb: Double = 0.0,
+    /** Stands in for a corrupt or unreadable preferences file. */
+    private val loadFails: Boolean = false,
+    /** Stands in for a disk that refuses every write. */
+    private val saveFails: Boolean = false,
 ) : SettingsStore {
     /** What is on "disk": one value, written whole or not at all. */
     var saved = RoutinePreferences(settings, cuesEnabled, weightLb)
@@ -16,21 +27,16 @@ internal class FakeSettingsStore(
     var writes = 0
         private set
 
-    override fun load(): RoutinePreferences = saved
+    override fun load(): RoutinePreferences {
+        if (loadFails) error("preferences file is unreadable")
+        return saved
+    }
 
     override fun save(preferences: RoutinePreferences) {
+        if (saveFails) error("preferences file is gone")
         saved = preferences
         writes++
     }
-}
-
-/** A store whose disk is gone: loads fine, refuses every write. */
-internal class FailingSettingsStore(
-    private val loaded: RoutinePreferences,
-) : SettingsStore {
-    override fun load(): RoutinePreferences = loaded
-
-    override fun save(preferences: RoutinePreferences): Unit = error("preferences file is gone")
 }
 
 /**

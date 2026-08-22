@@ -48,8 +48,18 @@ internal object SettingsKeys {
  * launch. The names it reads and writes live in [SettingsKeys].
  */
 class PreferencesSettingsStore(context: Context) : SettingsStore {
-    private val file =
+    // Held as the application context because this store now outlives the
+    // constructor call: the lazy handle below keeps it for the store's
+    // lifetime, and retaining an Activity that long would leak it.
+    private val context: Context = context.applicationContext
+
+    // Opened lazily so the first touch happens inside [load] or [save], both of
+    // which their caller guards. Constructing this store runs in the Activity's
+    // view-model factory, where a throw is a launch that never completes — and
+    // opening the file is the half most likely to throw.
+    private val file by lazy {
         context.getSharedPreferences(SettingsKeys.FILE, Context.MODE_PRIVATE)
+    }
 
     override fun load(): RoutinePreferences {
         val candidate = Settings(

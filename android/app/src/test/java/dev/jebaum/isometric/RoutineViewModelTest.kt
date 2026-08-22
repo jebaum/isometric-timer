@@ -238,7 +238,7 @@ class RoutineViewModelTest {
     @Test
     fun `a preference save that fails still applies in memory and is reported`() {
         val m = RoutineViewModel(
-            store = FailingSettingsStore(RoutinePreferences(Settings(2, 5, 2, 4))),
+            store = FakeSettingsStore(Settings(2, 5, 2, 4), saveFails = true),
             player = player,
             now = clock.now,
             failures = failures,
@@ -249,6 +249,84 @@ class RoutineViewModelTest {
         assertEquals(12.5, m.weightLb, 0.0)
         assertEquals(listOf("saving preferences"), failures.operations)
         assertEquals("preferences file is gone", failures.reports.single().second.message)
+    }
+
+    /**
+     * Both reads behind the constructor run inside the Activity's view-model
+     * factory, before the first frame: an unreadable preferences file or a
+     * locked database used to crash every launch, with no way back except
+     * clearing app data. Opening on defaults is the recoverable outcome.
+     */
+    @Test
+    fun `preferences that cannot be loaded open a usable app on defaults`() {
+        val defaults = RoutinePreferences()
+        val m = RoutineViewModel(
+            store = FakeSettingsStore(Settings(2, 5, 2, 4), loadFails = true),
+            player = player,
+            now = clock.now,
+            failures = failures,
+        )
+
+        assertEquals(defaults.settings, m.settings)
+        assertEquals(defaults.cuesEnabled, m.cuesEnabled)
+        assertEquals(defaults.weightLb, m.weightLb, 0.0)
+        assertEquals(listOf("loading preferences"), failures.operations)
+        assertEquals("preferences file is unreadable", failures.reports.single().second.message)
+
+        // Usable, not merely constructed: the routine still starts and runs.
+        m.toggle()
+        clock.advanceBy(m, 1.0)
+        assertEquals(RoutineStatus.RUNNING, m.snapshot.status)
+    }
+
+    @Test
+    fun `a history that cannot be read opens with no last completion`() {
+        val m = model(history = FakeCompletionHistory(listOf(1_700_000_000_000L), readFails = true))
+
+        assertNull(m.lastCompletionAt)
+        assertNull(m.spacingWarningAt(1_700_000_000_000L))
+        assertEquals(listOf("reading the latest completion"), failures.operations)
+        assertEquals("history database is locked", failures.reports.single().second.message)
+    }
+
+    /**
+     * These two run inside `remember` blocks while the history dialog composes,
+     * where a throw takes down composition rather than the dialog. An empty
+     * calendar is wrong, but it is a calendar.
+     */
+    @Test
+    fun `history queries that fail come back empty rather than crashing`() {
+        val m = model(history = FakeCompletionHistory(listOf(1_700_000_000_000L), readFails = true))
+
+        assertEquals(emptyList<WeightedCompletion>(), m.weightHistory())
+        assertEquals(emptyList<Long>(), m.completionsBetween(0L, Long.MAX_VALUE))
+
+        assertEquals(
+            listOf(
+                "reading the latest completion",
+                "reading the weight history",
+                "reading completions in a date range",
+            ),
+            failures.operations,
+        )
+    }
+
+    /**
+     * The guard covers device faults, not caller mistakes. A month built
+     * backwards is a bug in the calendar, and swallowing it would draw an empty
+     * month and file the bug under storage failures, where nobody would find it.
+     */
+    @Test
+    fun `a reversed history range fails loudly instead of reporting a storage failure`() {
+        val m = model(history = FakeCompletionHistory(listOf(1_700_000_000_000L)))
+
+        val thrown = runCatching { m.completionsBetween(10L, 5L) }.exceptionOrNull()
+
+        assertTrue(
+            "expected IllegalArgumentException, got $thrown",
+            thrown is IllegalArgumentException,
+        )
+        assertEquals(emptyList<String>(), failures.operations)
     }
 
     @Test
@@ -649,6 +727,45 @@ class RoutineViewModelTest {
 
         assertEquals(1, player.releases)
         assertEquals(1, history.closes)
+    }
+
+    /**
+     * The two halves of teardown are guarded separately so neither can strand
+     * the other. Both are made to throw at once: the release must still happen,
+     * the handle must still close, and the framework must get a clean return.
+     */
+    @Test
+    fun `a player that throws on release still lets the history handle close`() {
+        val history = FakeCompletionHistory(closeFails = true)
+        val exploding = RecordingCuePlayer(releaseFails = true)
+        val m = RoutineViewModel(
+            store = FakeSettingsStore(Settings(2, 5, 2, 4)),
+            player = exploding,
+            now = clock.now,
+            history = history,
+            failures = failures,
+        )
+
+        clearViewModel(m)
+
+        assertEquals(1, exploding.releases)
+        assertEquals("the history handle was never closed", 1, history.closes)
+        assertEquals(
+            listOf("releasing the cue player", "closing the history database"),
+            failures.operations,
+        )
+    }
+
+    @Test
+    fun `a history handle that throws on close does not take down teardown`() {
+        val history = FakeCompletionHistory(closeFails = true)
+        val m = model(history = history)
+
+        clearViewModel(m)
+
+        assertEquals(1, history.closes)
+        assertEquals("the player was released before history closed", 1, player.releases)
+        assertEquals(listOf("closing the history database"), failures.operations)
     }
 
     /**

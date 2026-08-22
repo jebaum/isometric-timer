@@ -59,11 +59,38 @@ class RoutineViewModel(
     }
 
     /**
+     * Every read of persistent state goes through here, so none of them can
+     * crash the app.
+     *
+     * The two that initialize state below run inside the Activity's view-model
+     * factory, before the first frame; [weightHistory] and [completionsBetween]
+     * run inside `remember` blocks while the history dialog composes. A throw
+     * from either place is not an exception the UI can catch — it is a launch
+     * that never completes, or a dialog that takes composition down with it —
+     * and neither is recoverable without clearing app data. Degrading to the
+     * fallback shows less than the truth, but it shows something, and the
+     * failure is reported rather than silently absorbed.
+     */
+    private fun <T> readSafely(operation: String, fallback: T, read: () -> T): T =
+        runCatching(read).getOrElse {
+            failures.reportSafely(operation, it)
+            fallback
+        }
+
+    /**
      * The saved state, held as the one value it is saved as. Exposed field by
      * field below so callers read what they need, but written only through
      * [persist] — there is no way to update one part and leave the rest behind.
      */
-    private var preferences: RoutinePreferences by mutableStateOf(store.load())
+    private var preferences: RoutinePreferences by mutableStateOf(
+        // Defaults are the right fallback: they are a valid schedule, so the app
+        // opens on a routine the user can run and re-save over. Re-saving is
+        // also the cost — the next Save writes these defaults over whatever is
+        // on disk, which is recovery for the file that could not be read and
+        // silent loss if the read failure was transient. Only a file that
+        // refuses to be read gets here, so recovery is the case worth serving.
+        readSafely("loading preferences", RoutinePreferences()) { store.load() },
+    )
 
     val settings: Settings get() = preferences.settings
 
@@ -72,7 +99,12 @@ class RoutineViewModel(
     /** Hold weight in pounds; 0 means bodyweight only. */
     val weightLb: Double get() = preferences.weightLb
 
-    var lastCompletionAt: Long? by mutableStateOf(history.latest())
+    // Null is what an empty history reads as anyway, which is the limit of this
+    // fallback's honesty: an unreadable log costs the spacing warning, and the
+    // screen then says what it would say for a log that is genuinely empty.
+    var lastCompletionAt: Long? by mutableStateOf(
+        readSafely<Long?>("reading the latest completion", fallback = null) { history.latest() },
+    )
         private set
 
     /** Invalidates calendar queries after a new row is inserted. */
@@ -252,10 +284,18 @@ class RoutineViewModel(
         persist(preferences.copy(weightLb = quantizeWeightLb(valueLb)))
     }
 
-    fun weightHistory(): List<WeightedCompletion> = history.weightHistory()
+    fun weightHistory(): List<WeightedCompletion> =
+        readSafely("reading the weight history", emptyList()) { history.weightHistory() }
 
-    fun completionsBetween(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long> =
-        history.between(startInclusiveMillis, endExclusiveMillis)
+    fun completionsBetween(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long> {
+        // Checked here so the guard below cannot absorb it. A reversed range is
+        // a caller building the wrong month, not a device fault: swallowing it
+        // would draw an empty calendar and file the bug under storage failures.
+        require(startInclusiveMillis <= endExclusiveMillis) { "history range is reversed" }
+        return readSafely("reading completions in a date range", emptyList()) {
+            history.between(startInclusiveMillis, endExclusiveMillis)
+        }
+    }
 
     /** The eight-hour mark, but only while it is still in the future. */
     fun spacingWarningAt(atMillis: Long = wallNow()): Long? = lastCompletionAt
@@ -265,8 +305,15 @@ class RoutineViewModel(
     fun currentWallTimeMillis(): Long = wallNow()
 
     override fun onCleared() {
-        player.release()
-        history.close()
+        // Both halves are guarded independently, and that independence is the
+        // point: teardown is the one path with nothing left to protect, so a
+        // handle that refuses to let go must neither crash out of it — the
+        // framework is clearing the view model, and there is no screen left to
+        // explain it — nor skip the release that comes after it.
+        runCatching { player.release() }
+            .onFailure { failures.reportSafely("releasing the cue player", it) }
+        runCatching { history.close() }
+            .onFailure { failures.reportSafely("closing the history database", it) }
     }
 
     companion object {

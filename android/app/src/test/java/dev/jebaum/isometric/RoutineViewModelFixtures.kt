@@ -51,7 +51,13 @@ internal class FakeClock(private var seconds: Double = 1_000.0) {
  * Stands in for the tone generator and vibrator, holding what would have been
  * played. [onPlay] makes the hardware misbehave on demand.
  */
-internal class RecordingCuePlayer(private val onPlay: (Cue) -> Unit = {}) : CuePlayer {
+internal class RecordingCuePlayer(
+    /** Stands in for a tone generator that throws on the way out. */
+    private val releaseFails: Boolean = false,
+    // Last, so `RecordingCuePlayer { ... }` still reads as "misbehaving
+    // hardware" rather than binding the trailing lambda to the flag.
+    private val onPlay: (Cue) -> Unit = {},
+) : CuePlayer {
 
     val played = mutableListOf<Cue>()
 
@@ -72,14 +78,26 @@ internal class RecordingCuePlayer(private val onPlay: (Cue) -> Unit = {}) : CueP
 
     override fun release() {
         releases += 1
+        if (releaseFails) error("the tone generator refused to release")
     }
 }
 
-/** Stands in for the completion database, holding the rows in memory. */
+/**
+ * Stands in for the completion database, holding the rows in memory.
+ *
+ * The failure flags stand in for a locked or corrupted database, one call at a
+ * time: a write can fail while reads still work, and teardown can fail after
+ * everything else went fine. [readFails] covers all three reads together
+ * because a database that cannot be queried cannot be queried by anyone.
+ */
 internal class FakeCompletionHistory(
     initial: List<Long> = emptyList(),
     /** Stands in for a locked or corrupted database. */
     private val recordFails: Boolean = false,
+    /** Stands in for a database no query can reach. */
+    private val readFails: Boolean = false,
+    /** Stands in for a handle that throws on the way out. */
+    private val closeFails: Boolean = false,
 ) : CompletionHistoryStore {
 
     private val completions = initial.map { WeightedCompletion(it, 0.0) }.toMutableList()
@@ -95,16 +113,24 @@ internal class FakeCompletionHistory(
         completions += WeightedCompletion(completedAtMillis, weightLb)
     }
 
-    override fun latest(): Long? = entries.maxOrNull()
+    override fun latest(): Long? {
+        if (readFails) error("history database is locked")
+        return entries.maxOrNull()
+    }
 
-    override fun between(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long> =
-        entries.filter { it in startInclusiveMillis until endExclusiveMillis }.sorted()
+    override fun between(startInclusiveMillis: Long, endExclusiveMillis: Long): List<Long> {
+        if (readFails) error("history database is locked")
+        return entries.filter { it in startInclusiveMillis until endExclusiveMillis }.sorted()
+    }
 
-    override fun weightHistory(): List<WeightedCompletion> =
-        completions.sortedBy { it.completedAtMillis }
+    override fun weightHistory(): List<WeightedCompletion> {
+        if (readFails) error("history database is locked")
+        return completions.sortedBy { it.completedAtMillis }
+    }
 
     override fun close() {
         closes++
+        if (closeFails) error("the history handle refused to close")
     }
 }
 
