@@ -1,9 +1,10 @@
 [versions]
 agp = "9.3.1"
-# AGP 9 has built-in Kotlin support and ships KGP 2.2.10. The Compose compiler
-# plugin has to match the Kotlin compiler exactly, so this tracks AGP, not the
-# newest Kotlin release.
-kotlin = "2.2.10"
+# Newer than the KGP 2.2.10 that AGP 9 bundles, applied through the buildscript
+# classpath override in build.gradle.kts — keep the two versions identical. The
+# Compose compiler plugin has to match the Kotlin compiler exactly, and this
+# version controls both.
+kotlin = "2.4.10"
 composeBom = "2026.08.00"
 activityCompose = "1.13.0"
 lifecycle = "2.11.0"

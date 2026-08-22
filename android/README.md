@@ -156,9 +156,10 @@ which wipes saved settings.
 
 ## Kotlin version
 
-Pinned to 2.2.10 rather than the newest release. AGP 9 compiles Kotlin itself
-and ships KGP 2.2.10, and the Compose compiler plugin has to match the Kotlin
-compiler exactly. Bump it only alongside AGP.
+Pinned to stable 2.4.10, newer than the KGP 2.2.10 that AGP 9 bundles, using
+AGP's documented buildscript-classpath override in `build.gradle.kts`. The
+version in `libs.versions.toml` controls the Kotlin compiler and the Compose
+compiler plugin together, and must stay equal to the classpath override.
 
 ## Lint and warnings
 
@@ -171,6 +172,6 @@ checks are disabled and one demoted, each a documented decision:
 | `OldTargetApi` | `targetSdk` held at 36 on purpose, above. |
 | `ObsoleteSdkInt` | Its suggested fix makes `aapt2` fail to resolve the icon; see [ICONS.md](ICONS.md). |
 | `MonochromeLauncherIcon` | The wireframe artwork cannot survive being tinted flat. |
-| `NewerVersionAvailable` / `GradleDependency` | Demoted to informational, not disabled: Kotlin must track AGP's KGP, but the notice is still worth seeing for the AndroidX dependencies. |
+| `NewerVersionAvailable` / `GradleDependency` | Demoted to informational, not disabled: toolchain bumps are deliberate, gated backlog items, but the notice is still worth seeing for the AndroidX dependencies. |
 
 See [ICONS.md](ICONS.md) for the launcher icon.
