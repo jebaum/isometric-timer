@@ -145,7 +145,10 @@ class RoutineViewModel(
 
         val completed = next.status == RoutineStatus.COMPLETE &&
             previous.status != RoutineStatus.COMPLETE
-        if (completed) rememberCompletion()
+        // How far past the end this frame landed. Taken from the same `elapsed`
+        // the snapshot was built from, so the recorded time cannot describe a
+        // different instant than the screen does.
+        if (completed) rememberCompletion(overshootSeconds = elapsed - routine.total)
 
         // Completion history is independent of audible cues, so this return
         // deliberately comes after the transition is recorded.
@@ -190,9 +193,24 @@ class RoutineViewModel(
             .onFailure { failures.reportSafely("playing cue $cue", it) }
     }
 
-    /** A storage failure must not stop the frame loop at the finish line. */
-    private fun rememberCompletion() {
-        val completedAt = wallNow()
+    /**
+     * A storage failure must not stop the frame loop at the finish line.
+     *
+     * [overshootSeconds] is how long ago the routine actually ended, measured on
+     * the monotonic clock. It is normally a fraction of a frame, but the frame
+     * loop parks while the app is backgrounded, so a routine that finished in
+     * your pocket is first *observed* on the frame after you unlock the phone —
+     * potentially hours later. Stamping that observation would file the routine
+     * on the wrong calendar day across midnight and restart the eight-hour
+     * spacing window from the moment you looked at the screen, so the two clock
+     * domains are reconciled here: monotonic seconds converted to wall-clock
+     * milliseconds and subtracted from now.
+     */
+    private fun rememberCompletion(overshootSeconds: Double) {
+        // Never negative at the transition — `elapsed >= total` is what defines
+        // it — but the floor states the intent: a same-frame finish records
+        // `wallNow()` exactly, and no completion is ever stamped in the future.
+        val completedAt = wallNow() - (overshootSeconds.coerceAtLeast(0.0) * 1_000).toLong()
         // The in-memory view of history moves only on success, so a failed write
         // leaves nothing half-recorded to reconcile — and is reported once, on
         // the transition, rather than on every frame that follows it.

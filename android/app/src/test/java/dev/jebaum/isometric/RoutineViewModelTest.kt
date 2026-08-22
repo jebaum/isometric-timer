@@ -202,10 +202,59 @@ class RoutineViewModelTest {
         repeat(20) { clock.advanceBy(0.5); m.tick() }
         repeat(5) { m.skip() }
 
-        assertEquals(listOf(completedAt), history.entries)
-        assertEquals(completedAt, m.lastCompletionAt)
+        val recordedAt = history.entries.single()
+        assertJustBeforeObservation(completedAt, recordedAt)
+        assertEquals(recordedAt, m.lastCompletionAt)
         assertEquals(1, m.historyVersion)
         assertTrue(player.played.isEmpty())
+    }
+
+    /**
+     * The frame that observes a finish lands a fraction of a frame past it, and
+     * the completion is stamped at the finish line rather than at that
+     * observation, so a tick-driven completion records just *before* the frozen
+     * wall clock rather than exactly on it. How far before is the backgrounded-
+     * finish test's business; the tests using this one only need to know the row
+     * is the routine they just ran.
+     */
+    private fun assertJustBeforeObservation(observedAt: Long, recordedAt: Long) {
+        val earliest = observedAt - (FRAME_SECONDS * 1_000).toLong() - 1
+        assertTrue(
+            "recorded $recordedAt, expected within one frame before $observedAt",
+            recordedAt in earliest..observedAt,
+        )
+    }
+
+    /**
+     * The frame loop parks while the app is backgrounded, so a routine can cross
+     * the finish line hours before `publish()` first observes it. Every other
+     * completion test freezes `wallNow`, which makes observation and finish
+     * coincide and hides the difference; this one is the only place the two come
+     * apart. Getting it wrong files the routine on the wrong calendar day and
+     * restarts the eight-hour spacing window from the moment you unlocked the
+     * phone.
+     */
+    @Test
+    fun `a finish crossed while backgrounded is recorded at the finish line`() {
+        val history = FakeCompletionHistory()
+        val observedAt = 1_700_000_000_000L
+        val gapSeconds = 3.0 * 60 * 60
+        val m = model(
+            // Total 10s: RIGHT_HOLD and LEFT_HOLD, no switch or rest.
+            settings = Settings(cycles = 1, holdSeconds = 5, switchSeconds = 0, restSeconds = 0),
+            history = history,
+            wallNow = { observedAt },
+        )
+        m.toggle()
+
+        // One jump with no ticks in between, as a trip through the background is.
+        clock.advanceBy(10.0 + gapSeconds)
+        m.tick() // the first frame after coming back
+
+        val finishedAt = observedAt - (gapSeconds * 1000).toLong()
+        assertEquals(RoutineStatus.COMPLETE, m.snapshot.status)
+        assertEquals(listOf(finishedAt), history.entries)
+        assertEquals(finishedAt, m.lastCompletionAt)
     }
 
     /**
@@ -447,7 +496,9 @@ class RoutineViewModelTest {
         m.toggle()
         clock.advanceBy(m, 6.0)
 
-        assertEquals(listOf(WeightedCompletion(completedAt, 12.5)), history.weightHistory())
+        val recorded = history.weightHistory().single()
+        assertEquals(12.5, recorded.weightLb, 0.0)
+        assertJustBeforeObservation(completedAt, recorded.completedAtMillis)
     }
 
     @Test
