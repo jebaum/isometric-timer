@@ -5,6 +5,21 @@ sideloaded onto a personal device rather than published. It sounds and vibrates
 on every phase boundary, which matters because during a hold you are usually not
 looking at the screen.
 
+<table>
+<tr>
+<td width="25%"><img src="docs/screenshots/ready.png" width="100%" alt="Ready screen: the RIGHT SIDE phase at 35 seconds, a Start button, and today's routine count"></td>
+<td width="25%"><img src="docs/screenshots/hold.png" width="100%" alt="A hold in progress: 21 seconds left, the phase track part-filled, SWITCH queued next"></td>
+<td width="25%"><img src="docs/screenshots/rest.png" width="100%" alt="A rest phase: 82 seconds left, the accent colour drained to grey"></td>
+<td width="25%"><img src="docs/screenshots/calendar.png" width="100%" alt="The routine calendar: a month of completions, one mark per routine, above the hold-weight chart"></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Ready</b><br>Waiting to start</sub></td>
+<td align="center"><sub><b>Holding</b><br>The screen you don't look at</sub></td>
+<td align="center"><sub><b>Rest</b><br>Colour drains out</sub></td>
+<td align="center"><sub><b>History</b><br>Completions and weight</sub></td>
+</tr>
+</table>
+
 Everything lives in [`android/`](android/); see
 [`android/README.md`](android/README.md) for the toolchain, the build and
 install steps, and the design decisions behind the app.
