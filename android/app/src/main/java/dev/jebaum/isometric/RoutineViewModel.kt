@@ -20,6 +20,16 @@ import dev.jebaum.isometric.timer.underway
  * Holds the routine across configuration changes, so a rotation mid-hold does
  * not restart the timer.
  *
+ * Its sibling boundary belongs beside it, because the two are easy to conflate:
+ * process death is not a configuration change. No session state is persisted,
+ * deliberately — so a process reclaimed under memory pressure while
+ * backgrounded, or force-stopped, takes the active routine with it, and the app
+ * reopens on a fresh READY screen with no completion row and nothing to explain
+ * where the routine went. The window for that is narrow rather than closed:
+ * `TimerScreen` holds the screen awake for as long as a routine is active,
+ * which keeps the app foreground and visible for the whole of it. Settings and
+ * completion history are a different matter — both are on disk and survive.
+ *
  * Every dependency arrives through the constructor — including the clock — so
  * the cue state machine below can be driven deterministically from a plain JVM
  * test. It is the only stateful logic in the app that a device would otherwise
